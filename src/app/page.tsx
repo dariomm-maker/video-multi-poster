@@ -26,6 +26,13 @@ interface GeneratedData {
   hashtags: string[];
 }
 
+interface PublishReportItem {
+  channel: string;
+  success: boolean;
+  message: string;
+  actionRequired?: "open_settings";
+}
+
 export default function Home() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -55,8 +62,7 @@ export default function Home() {
   // Estado de publicación
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStep, setPublishStep] = useState<string | null>(null);
-  const [publishSuccess, setPublishSuccess] = useState(false);
-  const [publishDetails, setPublishDetails] = useState<string[]>([]);
+  const [publishReports, setPublishReports] = useState<PublishReportItem[]>([]);
 
   // Modal de configuración
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -174,7 +180,7 @@ export default function Home() {
     setVideoFile(file);
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
-    setPublishSuccess(false);
+    setPublishReports([]);
     setExtractedFrames([]);
     setAiSummary("");
 
@@ -284,9 +290,8 @@ export default function Home() {
     }
 
     setIsPublishing(true);
-    setPublishSuccess(false);
-    setPublishDetails([]);
-    const successMessages: string[] = [];
+    setPublishReports([]);
+    const reports: PublishReportItem[] = [];
 
     const captionText = `${title}\n\n${description}\n\n${hashtags.join(" ")}`;
     const targetVideoUrl = publicVideoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
@@ -299,22 +304,43 @@ export default function Home() {
         const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
         const savedAccountId = localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
 
-        const igRes = await fetch("/api/publish/instagram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            videoUrl: targetVideoUrl,
-            caption: captionText,
-            token: savedToken,
-            accountId: savedAccountId,
-          }),
-        });
+        try {
+          const igRes = await fetch("/api/publish/instagram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              videoUrl: targetVideoUrl,
+              caption: captionText,
+              token: savedToken,
+              accountId: savedAccountId,
+            }),
+          });
 
-        const igData = await igRes.json();
-        if (igData.success) {
-          successMessages.push(`Instagram Reels: ¡Publicado! (ID: ${igData.postId})`);
-        } else {
-          console.warn("Instagram publish error:", igData.error);
+          const igData = await igRes.json();
+          if (igData.success) {
+            reports.push({
+              channel: "Instagram Reels",
+              success: true,
+              message: `¡Publicado con éxito en @realdreams.crew! (ID: ${igData.postId})`,
+            });
+          } else {
+            const err = igData.error || "Error al publicar";
+            const isExpired = err.toLowerCase().includes("expired") || err.toLowerCase().includes("session") || err.toLowerCase().includes("token");
+            reports.push({
+              channel: "Instagram Reels",
+              success: false,
+              message: isExpired
+                ? "El token de acceso de Meta ha caducado. Pulsa 'Abrir Configuración' y renueva tu token en Graph Explorer."
+                : err,
+              actionRequired: isExpired ? "open_settings" : undefined,
+            });
+          }
+        } catch (e: any) {
+          reports.push({
+            channel: "Instagram Reels",
+            success: false,
+            message: `Error de conexión: ${e.message}`,
+          });
         }
       }
 
@@ -325,27 +351,52 @@ export default function Home() {
         const ytToken = localStorage.getItem("omnipost_youtube_token");
 
         if (ytToken) {
-          const ytRes = await fetch("/api/publish/youtube", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              videoUrl: targetVideoUrl,
-              title,
-              description,
-              hashtags,
-              token: ytToken,
-              privacyStatus: "public",
-            }),
-          });
-          const ytData = await ytRes.json();
-          if (ytData.success) {
-            successMessages.push(`YouTube Shorts: ¡Publicado! (${ytData.url})`);
-          } else {
-            console.warn("YouTube error:", ytData.error);
-            successMessages.push(`YouTube Shorts: ${ytData.error}`);
+          try {
+            const ytRes = await fetch("/api/publish/youtube", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                videoUrl: targetVideoUrl,
+                title,
+                description,
+                hashtags,
+                token: ytToken,
+                privacyStatus: "public",
+              }),
+            });
+            const ytData = await ytRes.json();
+            if (ytData.success) {
+              reports.push({
+                channel: "YouTube Shorts",
+                success: true,
+                message: `¡Publicado con éxito! (${ytData.url})`,
+              });
+            } else {
+              const err = ytData.error || "Error al subir a YouTube";
+              const isExpired = err.toLowerCase().includes("invalid authentication") || err.toLowerCase().includes("oauth") || ytRes.status === 401;
+              reports.push({
+                channel: "YouTube Shorts",
+                success: false,
+                message: isExpired
+                  ? "Tu sesión de Google ha caducado (duran 1 hora). Pulsa 'Abrir Configuración' y haz clic en 'Reconectar Canal' para renovarla en 1 segundo."
+                  : err,
+                actionRequired: isExpired ? "open_settings" : undefined,
+              });
+            }
+          } catch (e: any) {
+            reports.push({
+              channel: "YouTube Shorts",
+              success: false,
+              message: `Error de conexión: ${e.message}`,
+            });
           }
         } else {
-          successMessages.push("YouTube Shorts: Conecta tu canal en Configuración para activar la subida automática.");
+          reports.push({
+            channel: "YouTube Shorts",
+            success: false,
+            message: "Canal no conectado. Pulsa 'Abrir Configuración' y conecta tu canal de Google.",
+            actionRequired: "open_settings",
+          });
         }
       }
 
@@ -356,31 +407,50 @@ export default function Home() {
         const ttToken = localStorage.getItem("omnipost_tiktok_token");
 
         if (ttToken) {
-          const ttRes = await fetch("/api/publish/tiktok", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              videoUrl: targetVideoUrl,
-              title: `${title} ${hashtags.slice(0, 4).join(" ")}`,
-              token: ttToken,
-              privacyLevel: "PUBLIC_TO_EVERYONE",
-            }),
-          });
-          const ttData = await ttRes.json();
-          if (ttData.success) {
-            successMessages.push(`TikTok: ¡Publicado con éxito! (Publish ID: ${ttData.publishId})`);
-          } else {
-            console.warn("TikTok error:", ttData.error);
-            successMessages.push(`TikTok: ${ttData.error}`);
+          try {
+            const ttRes = await fetch("/api/publish/tiktok", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                videoUrl: targetVideoUrl,
+                title: `${title} ${hashtags.slice(0, 4).join(" ")}`,
+                token: ttToken,
+                privacyLevel: "PUBLIC_TO_EVERYONE",
+              }),
+            });
+            const ttData = await ttRes.json();
+            if (ttData.success) {
+              reports.push({
+                channel: "TikTok",
+                success: true,
+                message: `¡Publicado con éxito en TikTok! (Publish ID: ${ttData.publishId})`,
+              });
+            } else {
+              reports.push({
+                channel: "TikTok",
+                success: false,
+                message: ttData.error || "Error al publicar en TikTok.",
+              });
+            }
+          } catch (e: any) {
+            reports.push({
+              channel: "TikTok",
+              success: false,
+              message: `Error de conexión: ${e.message}`,
+            });
           }
         } else {
-          successMessages.push("TikTok: Credenciales guardadas. Pulsa 'Conectar TikTok' en Configuración para autorizar tu perfil.");
+          reports.push({
+            channel: "TikTok",
+            success: false,
+            message: "TikTok requiere autorización. Pulsa 'Abrir Configuración' y haz clic en 'Conectar TikTok' para autorizar tu perfil.",
+            actionRequired: "open_settings",
+          });
         }
       }
 
-      setPublishDetails(successMessages);
+      setPublishReports(reports);
       setPublishStep(null);
-      setPublishSuccess(true);
     } catch (e: any) {
       alert("Error en el proceso de publicación: " + e.message);
     } finally {
@@ -846,23 +916,76 @@ export default function Home() {
                 </div>
               )}
 
-              {publishSuccess && (
-                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <p className="text-xs font-semibold text-emerald-300">
-                      ¡Publicación ejecutada con éxito!
-                    </p>
-                  </div>
-                  {publishDetails.length > 0 && (
-                    <div className="space-y-1 pl-6">
-                      {publishDetails.map((msg, i) => (
-                        <p key={i} className="text-[11px] text-emerald-400/90 font-mono">
-                          {msg}
-                        </p>
-                      ))}
+              {publishReports.length > 0 && (
+                <div
+                  className={`p-4 rounded-xl border space-y-3 ${
+                    publishReports.every((r) => r.success)
+                      ? "bg-emerald-950/40 border-emerald-800/60"
+                      : publishReports.some((r) => r.success)
+                      ? "bg-amber-950/30 border-amber-800/60"
+                      : "bg-neutral-900/90 border-neutral-800"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {publishReports.every((r) => r.success) ? (
+                        <Check className="w-4 h-4 text-emerald-400 stroke-[3]" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                      )}
+                      <p className="text-xs font-bold text-white">
+                        {publishReports.every((r) => r.success)
+                          ? "¡Vídeo publicado con éxito en todas las redes!"
+                          : publishReports.some((r) => r.success)
+                          ? "Publicación parcial completada:"
+                          : "Informe de publicación (Acción requerida):"}
+                      </p>
                     </div>
-                  )}
+                    {publishReports.some((r) => !r.success && r.actionRequired) && (
+                      <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-sm shadow-indigo-600/30"
+                      >
+                        Abrir Configuración
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t border-neutral-800/60">
+                    {publishReports.map((report, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-2.5 rounded-lg border text-xs flex flex-col gap-1 ${
+                          report.success
+                            ? "bg-emerald-950/30 border-emerald-900/50 text-emerald-300"
+                            : "bg-neutral-950/70 border-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-white flex items-center gap-1.5">
+                            {report.success ? (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-amber-400" />
+                            )}
+                            {report.channel}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                              report.success
+                                ? "bg-emerald-900/60 text-emerald-300"
+                                : "bg-amber-950 text-amber-400 border border-amber-800/60"
+                            }`}
+                          >
+                            {report.success ? "Publicado" : "Pendiente"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 leading-relaxed pl-3.5">
+                          {report.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

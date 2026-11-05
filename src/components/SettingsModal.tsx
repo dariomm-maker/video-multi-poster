@@ -68,7 +68,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setTiktokClientKey(savedTtKey);
       setTiktokClientSecret(savedTtSecret);
       setTiktokToken(savedTtToken);
-      if (savedTtToken || savedTtKey) setIsTikTokConnected(true);
+      if (savedTtToken) setIsTikTokConnected(true);
     }
   }, [isOpen]);
 
@@ -198,15 +198,28 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 />
               </div>
               <div>
-                <label className="text-[11px] text-neutral-400 block mb-1">
-                  Meta Access Token:
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] text-neutral-400 block">
+                    Meta Access Token:
+                  </label>
+                  <a
+                    href="https://developers.facebook.com/tools/explorer/?app_id=2287162988793809"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-pink-400 hover:underline"
+                  >
+                    Renovar Token en Graph Explorer &rarr;
+                  </a>
+                </div>
                 <input
                   type="password"
                   value={instagramToken}
                   onChange={(e) => setInstagramToken(e.target.value)}
                   className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
                 />
+                <p className="text-[10px] text-neutral-500 mt-1">
+                  Requiere permisos: <code className="text-pink-400">instagram_basic</code> y <code className="text-pink-400">instagram_content_publish</code>.
+                </p>
               </div>
             </div>
 
@@ -222,8 +235,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     🟢 Canal Conectado
                   </span>
                 ) : (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
-                    ⚪ No conectado
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-800/60 font-medium">
+                    🟡 No Conectado
                   </span>
                 )}
               </div>
@@ -241,8 +254,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <div className="pt-1 flex items-center justify-between">
-                <p className="text-[11px] text-neutral-500">
-                  Inicia sesión una vez para autorizar la subida de Shorts:
+                <p className="text-[10px] text-neutral-400 max-w-[280px]">
+                  Google expira los tokens cada 1 hora. Si falla al publicar, pulsa aquí para renovarlo al instante:
                 </p>
                 <button
                   type="button"
@@ -262,9 +275,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <TikTokIcon className="w-4 h-4 text-cyan-400" />
                   <span className="font-semibold">TikTok Content Posting (Sandbox)</span>
                 </div>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
-                  🟢 Sandbox Activo
-                </span>
+                {isTikTokConnected ? (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
+                    🟢 TikTok Autorizado
+                  </span>
+                ) : (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-800/60 font-medium">
+                    🟡 Pendiente Autorizar
+                  </span>
+                )}
               </div>
 
               <div>
@@ -292,8 +311,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <div className="pt-1 flex items-center justify-between">
-                <p className="text-[11px] text-neutral-500">
-                  Vincula tu cuenta de TikTok con 1 clic:
+                <p className="text-[10px] text-neutral-400 max-w-[280px]">
+                  {isTikTokConnected
+                    ? "Tu cuenta ya está autorizada. Si caduca, puedes volver a autorizarla:"
+                    : "⚠️ Haz clic para autorizar tu perfil de TikTok con la app:"}
                 </p>
                 <button
                   type="button"
@@ -301,7 +322,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-semibold transition-all shadow-md shadow-cyan-600/20"
                 >
                   <LogIn className="w-3.5 h-3.5" />
-                  <span>Conectar TikTok</span>
+                  <span>{isTikTokConnected ? "Reconectar TikTok" : "Conectar TikTok"}</span>
                 </button>
               </div>
             </div>
