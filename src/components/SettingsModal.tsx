@@ -39,7 +39,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setGeminiKey(localStorage.getItem("omnipost_gemini_key") || "");
+      const savedGemini = localStorage.getItem("omnipost_gemini_key") || "";
+      setGeminiKey(savedGemini);
       
       // YouTube
       const savedYtId =
@@ -141,21 +142,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <Sparkles className="w-4 h-4 text-amber-400" />
                 Google Gemini API Key (100% Gratis)
               </label>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-indigo-400 hover:underline"
-              >
-                Obtener clave gratuita &rarr;
-              </a>
+              {geminiKey ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
+                  🟢 Clave Configurada
+                </span>
+              ) : (
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-indigo-400 hover:underline"
+                >
+                  Obtener clave gratuita &rarr;
+                </a>
+              )}
             </div>
             <p className="text-xs text-neutral-400 mb-3">
-              Usada para generar los ganchos virales, descripciones SEO y hashtags automáticos a partir del vídeo.
+              Pega tu clave para generar los ganchos virales, descripciones SEO y hashtags automáticos con Gemini AI.
             </p>
             <input
               type="password"
-              placeholder="AIzaSy..."
+              placeholder="AQ.Ab8..."
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
               className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500 font-mono"
