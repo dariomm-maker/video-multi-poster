@@ -43,7 +43,7 @@ export default function Home() {
   const [channels, setChannels] = useState({
     youtube: true,
     instagram: true,
-    tiktok: false,
+    tiktok: true,
   });
 
   // Estado de publicación
@@ -57,19 +57,33 @@ export default function Home() {
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isInstagramConfigured, setIsInstagramConfigured] = useState(false);
   const [isYouTubeConfigured, setIsYouTubeConfigured] = useState(false);
+  const [isTikTokConfigured, setIsTikTokConfigured] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Comprobar parámetros de retorno de OAuth y estado de conexiones
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ttToken = urlParams.get("tiktok_token");
+      if (ttToken) {
+        localStorage.setItem("omnipost_tiktok_token", ttToken);
+        // Limpiamos la URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
       const igToken = localStorage.getItem("omnipost_instagram_token");
       const igAccId = localStorage.getItem("omnipost_instagram_account_id");
       if (igToken && igAccId) setIsInstagramConfigured(true);
 
       const ytToken = localStorage.getItem("omnipost_youtube_token");
       if (ytToken) setIsYouTubeConfigured(true);
+
+      const savedTtToken = localStorage.getItem("omnipost_tiktok_token");
+      const savedTtKey = localStorage.getItem("omnipost_tiktok_client_key");
+      if (savedTtToken || savedTtKey) setIsTikTokConfigured(true);
     }
   }, [isSettingsOpen]);
 
@@ -148,7 +162,7 @@ export default function Home() {
     setTimeout(() => setCopiedText(null), 2000);
   };
 
-  // Publicación simultánea (Orquestación)
+  // Publicación simultánea (Orquestación en las 3 plataformas)
   const handlePublishAll = async () => {
     if (!videoFile && !publicVideoUrl) {
       alert("Sube un vídeo o introduce una URL de vídeo antes de publicar.");
@@ -221,16 +235,37 @@ export default function Home() {
             successMessages.push(`YouTube Shorts: ${ytData.error}`);
           }
         } else {
-          // Si aún no conectó el canal, le avisamos amablemente
           successMessages.push("YouTube Shorts: Conecta tu canal en Configuración para activar la subida automática.");
         }
       }
 
-      // 3. TIKTOK (Simulación / Siguiente paso)
+      // 3. TIKTOK (API REAL CONTENT POSTING)
       if (channels.tiktok) {
-        setPublishStep("Subiendo a TikTok...");
-        await new Promise((r) => setTimeout(r, 1000));
-        successMessages.push("TikTok: Pendiente de credenciales de Content Posting API.");
+        setPublishStep("Enviando vídeo a TikTok...");
+
+        const ttToken = localStorage.getItem("omnipost_tiktok_token");
+
+        if (ttToken) {
+          const ttRes = await fetch("/api/publish/tiktok", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              videoUrl: targetVideoUrl,
+              title: `${title} ${hashtags.slice(0, 4).join(" ")}`,
+              token: ttToken,
+              privacyLevel: "PUBLIC_TO_EVERYONE",
+            }),
+          });
+          const ttData = await ttRes.json();
+          if (ttData.success) {
+            successMessages.push(`TikTok: ¡Publicado con éxito! (Publish ID: ${ttData.publishId})`);
+          } else {
+            console.warn("TikTok error:", ttData.error);
+            successMessages.push(`TikTok: ${ttData.error}`);
+          }
+        } else {
+          successMessages.push("TikTok: Credenciales guardadas. Pulsa 'Conectar TikTok' en Configuración para autorizar tu perfil.");
+        }
       }
 
       setPublishDetails(successMessages);
@@ -269,7 +304,7 @@ export default function Home() {
             >
               <Settings className="w-4 h-4 text-neutral-400" />
               <span>Configuración & APIs</span>
-              {(isInstagramConfigured || isYouTubeConfigured) && (
+              {(isInstagramConfigured || isYouTubeConfigured || isTikTokConfigured) && (
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
               )}
             </button>
@@ -362,11 +397,11 @@ export default function Home() {
                 </div>
               )}
 
-              {/* URL pública para Meta/YouTube */}
+              {/* URL pública opcional */}
               <div className="mt-4 pt-4 border-t border-neutral-800/60">
                 <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 mb-1">
                   <LinkIcon className="w-3 h-3 text-pink-400" />
-                  URL pública del vídeo (.mp4 para Reels/Shorts):
+                  URL pública del vídeo (.mp4 para Instagram, Shorts y TikTok):
                 </label>
                 <input
                   type="text"
@@ -560,7 +595,7 @@ export default function Home() {
                 Selecciona las plataformas donde deseas publicar este vídeo en simultáneo:
               </p>
 
-              {/* Toggles de Redes */}
+              {/* Toggles de las 3 Redes */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* YouTube */}
                 <div
@@ -617,13 +652,16 @@ export default function Home() {
                   onClick={() => setChannels({ ...channels, tiktok: !channels.tiktok })}
                   className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                     channels.tiktok
-                      ? "bg-cyan-950/20 border-cyan-800/60 text-white"
+                      ? "bg-cyan-950/20 border-cyan-800/60 text-white shadow-lg shadow-cyan-950/20"
                       : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <TikTokIcon className={`w-5 h-5 ${channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
-                    <span className="text-xs font-semibold">TikTok</span>
+                    <div>
+                      <span className="text-xs font-semibold block">TikTok</span>
+                      <span className="text-[10px] text-cyan-400/90 font-medium">Content API</span>
+                    </div>
                   </div>
                   <div
                     className={`w-4 h-4 rounded-full border flex items-center justify-center ${

@@ -30,13 +30,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [instagramAccountId, setInstagramAccountId] = useState("");
   
   // TikTok
-  const [tiktokClientKey, setTiktokClientKey] = useState("");
+  const [tiktokClientKey, setTiktokClientKey] = useState("awv1wzl5z2vr09by");
+  const [tiktokClientSecret, setTiktokClientSecret] = useState("f8Z8CgCSMH361tIwP9lISgLQhdaoi5OO");
+  const [tiktokToken, setTiktokToken] = useState("");
+  const [isTikTokConnected, setIsTikTokConnected] = useState(false);
+
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setGeminiKey(localStorage.getItem("omnipost_gemini_key") || "");
       
+      // YouTube
       const savedYtId =
         localStorage.getItem("omnipost_youtube_client_id") ||
         "1032994851591-i6lqbe5l4oheq64s4b564oa50ujchrtk.apps.googleusercontent.com";
@@ -45,6 +50,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setYoutubeToken(savedYtToken);
       if (savedYtToken) setIsYouTubeConnected(true);
 
+      // Instagram
       const savedToken =
         localStorage.getItem("omnipost_instagram_token") ||
         "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
@@ -53,7 +59,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       
       setInstagramToken(savedToken);
       setInstagramAccountId(savedAccountId);
-      setTiktokClientKey(localStorage.getItem("omnipost_tiktok_client_key") || "");
+
+      // TikTok
+      const savedTtKey = localStorage.getItem("omnipost_tiktok_client_key") || "awv1wzl5z2vr09by";
+      const savedTtSecret = localStorage.getItem("omnipost_tiktok_client_secret") || "f8Z8CgCSMH361tIwP9lISgLQhdaoi5OO";
+      const savedTtToken = localStorage.getItem("omnipost_tiktok_token") || "";
+      setTiktokClientKey(savedTtKey);
+      setTiktokClientSecret(savedTtSecret);
+      setTiktokToken(savedTtToken);
+      if (savedTtToken || savedTtKey) setIsTikTokConnected(true);
     }
   }, [isOpen]);
 
@@ -83,6 +97,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  const handleConnectTikTok = () => {
+    window.location.href = `/api/auth/tiktok?client_key=${tiktokClientKey}`;
+  };
+
   const handleSave = () => {
     localStorage.setItem("omnipost_gemini_key", geminiKey);
     localStorage.setItem("omnipost_youtube_client_id", youtubeClientId);
@@ -90,6 +108,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     localStorage.setItem("omnipost_instagram_token", instagramToken);
     localStorage.setItem("omnipost_instagram_account_id", instagramAccountId);
     localStorage.setItem("omnipost_tiktok_client_key", tiktokClientKey);
+    localStorage.setItem("omnipost_tiktok_client_secret", tiktokClientSecret);
+    localStorage.setItem("omnipost_tiktok_token", tiktokToken);
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -146,6 +166,43 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-neutral-300">Conexiones de Redes Sociales</h3>
 
+            {/* Instagram Reels */}
+            <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-pink-900/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-neutral-200">
+                  <InstagramIcon className="w-4 h-4 text-pink-500" />
+                  <span className="font-semibold">Instagram Reels API</span>
+                </div>
+                {instagramAccountId === "17841426600001306" && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
+                    🟢 Conectado con @realdreams.crew
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 block mb-1">
+                  Instagram Account ID:
+                </label>
+                <input
+                  type="text"
+                  value={instagramAccountId}
+                  onChange={(e) => setInstagramAccountId(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 block mb-1">
+                  Meta Access Token:
+                </label>
+                <input
+                  type="password"
+                  value={instagramToken}
+                  onChange={(e) => setInstagramToken(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                />
+              </div>
+            </div>
+
             {/* YouTube Shorts */}
             <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-red-900/40 space-y-3">
               <div className="flex items-center justify-between">
@@ -191,56 +248,61 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </div>
 
-            {/* Instagram */}
-            <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-pink-900/40 space-y-2.5">
+            {/* TikTok */}
+            <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-cyan-900/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-neutral-200">
-                  <InstagramIcon className="w-4 h-4 text-pink-500" />
-                  <span className="font-semibold">Instagram Reels API</span>
+                  <TikTokIcon className="w-4 h-4 text-cyan-400" />
+                  <span className="font-semibold">TikTok Content Posting API</span>
                 </div>
-                {instagramAccountId === "17841426600001306" && (
+                {isTikTokConnected ? (
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
-                    🟢 Conectado con @realdreams.crew
+                    🟢 Credenciales Listas
+                  </span>
+                ) : (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
+                    ⚪ Pendiente
                   </span>
                 )}
               </div>
+
               <div>
                 <label className="text-[11px] text-neutral-400 block mb-1">
-                  Instagram Account ID:
+                  TikTok Client Key:
                 </label>
                 <input
                   type="text"
-                  value={instagramAccountId}
-                  onChange={(e) => setInstagramAccountId(e.target.value)}
-                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                  value={tiktokClientKey}
+                  onChange={(e) => setTiktokClientKey(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
+
               <div>
                 <label className="text-[11px] text-neutral-400 block mb-1">
-                  Meta Access Token:
+                  TikTok Client Secret:
                 </label>
                 <input
                   type="password"
-                  value={instagramToken}
-                  onChange={(e) => setInstagramToken(e.target.value)}
-                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                  value={tiktokClientSecret}
+                  onChange={(e) => setTiktokClientSecret(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
-            </div>
 
-            {/* TikTok */}
-            <div className="p-3 rounded-lg bg-neutral-950/40 border border-neutral-800 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-neutral-200">
-                <TikTokIcon className="w-4 h-4 text-cyan-400" />
-                <span>TikTok Content Posting API</span>
+              <div className="pt-1 flex items-center justify-between">
+                <p className="text-[11px] text-neutral-500">
+                  Vincula tu cuenta de TikTok con 1 clic:
+                </p>
+                <button
+                  type="button"
+                  onClick={handleConnectTikTok}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-semibold transition-all shadow-md shadow-cyan-600/20"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Conectar TikTok</span>
+                </button>
               </div>
-              <input
-                type="text"
-                placeholder="TikTok Client Key"
-                value={tiktokClientKey}
-                onChange={(e) => setTiktokClientKey(e.target.value)}
-                className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-500"
-              />
             </div>
           </div>
         </div>
