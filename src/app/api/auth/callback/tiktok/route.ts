@@ -13,8 +13,9 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${baseUrl}/?error=${encodeURIComponent(error || "No_code")}`);
   }
 
-  const clientKey = "awv1wzl5z2vr09by";
-  const clientSecret = "f8Z8CgCSMH361tIwP9lISgLQhdaoi5OO";
+  // Credenciales de Sandbox de TikTok
+  const clientKey = "sbaw3qhchee8ajhvb1";
+  const clientSecret = "mtrLpT84hJOhukh2hht9iPnEgZzbUnsv";
   const redirectUri = `${baseUrl}/api/auth/callback/tiktok`;
 
   try {

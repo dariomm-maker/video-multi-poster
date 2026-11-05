@@ -29,9 +29,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [instagramToken, setInstagramToken] = useState("");
   const [instagramAccountId, setInstagramAccountId] = useState("");
   
-  // TikTok
-  const [tiktokClientKey, setTiktokClientKey] = useState("awv1wzl5z2vr09by");
-  const [tiktokClientSecret, setTiktokClientSecret] = useState("f8Z8CgCSMH361tIwP9lISgLQhdaoi5OO");
+  // TikTok (Sandbox Credentials)
+  const [tiktokClientKey, setTiktokClientKey] = useState("sbaw3qhchee8ajhvb1");
+  const [tiktokClientSecret, setTiktokClientSecret] = useState("mtrLpT84hJOhukh2hht9iPnEgZzbUnsv");
   const [tiktokToken, setTiktokToken] = useState("");
   const [isTikTokConnected, setIsTikTokConnected] = useState(false);
 
@@ -61,8 +61,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setInstagramAccountId(savedAccountId);
 
       // TikTok
-      const savedTtKey = localStorage.getItem("omnipost_tiktok_client_key") || "awv1wzl5z2vr09by";
-      const savedTtSecret = localStorage.getItem("omnipost_tiktok_client_secret") || "f8Z8CgCSMH361tIwP9lISgLQhdaoi5OO";
+      const savedTtKey = localStorage.getItem("omnipost_tiktok_client_key") || "sbaw3qhchee8ajhvb1";
+      const savedTtSecret = localStorage.getItem("omnipost_tiktok_client_secret") || "mtrLpT84hJOhukh2hht9iPnEgZzbUnsv";
       const savedTtToken = localStorage.getItem("omnipost_tiktok_token") || "";
       setTiktokClientKey(savedTtKey);
       setTiktokClientSecret(savedTtSecret);
@@ -248,27 +248,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </div>
 
-            {/* TikTok */}
+            {/* TikTok Sandbox */}
             <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-cyan-900/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-neutral-200">
                   <TikTokIcon className="w-4 h-4 text-cyan-400" />
-                  <span className="font-semibold">TikTok Content Posting API</span>
+                  <span className="font-semibold">TikTok Content Posting (Sandbox)</span>
                 </div>
-                {isTikTokConnected ? (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
-                    🟢 Credenciales Listas
-                  </span>
-                ) : (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
-                    ⚪ Pendiente
-                  </span>
-                )}
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
+                  🟢 Sandbox Activo
+                </span>
               </div>
 
               <div>
                 <label className="text-[11px] text-neutral-400 block mb-1">
-                  TikTok Client Key:
+                  TikTok Client Key (Sandbox):
                 </label>
                 <input
                   type="text"

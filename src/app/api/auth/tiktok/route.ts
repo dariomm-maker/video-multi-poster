@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const clientKey = searchParams.get("client_key") || "awv1wzl5z2vr09by";
+  const clientKey = searchParams.get("client_key") || "sbaw3qhchee8ajhvb1";
 
   // URL del host actual (Vercel o localhost)
   const host = req.headers.get("host") || "video-multi-poster.vercel.app";
