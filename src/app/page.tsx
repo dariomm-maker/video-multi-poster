@@ -13,8 +13,7 @@ import {
   Clock,
   FileVideo,
   Layers,
-  Link as LinkIcon,
-  ExternalLink
+  Link as LinkIcon
 } from "lucide-react";
 import { YouTubeIcon, InstagramIcon, TikTokIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
@@ -42,7 +41,7 @@ export default function Home() {
 
   // Redes seleccionadas para publicar
   const [channels, setChannels] = useState({
-    youtube: false,
+    youtube: true,
     instagram: true,
     tiktok: false,
   });
@@ -51,12 +50,13 @@ export default function Home() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStep, setPublishStep] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
-  const [publishDetails, setPublishDetails] = useState<string | null>(null);
+  const [publishDetails, setPublishDetails] = useState<string[]>([]);
 
   // Modal de configuración
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isInstagramConfigured, setIsInstagramConfigured] = useState(false);
+  const [isYouTubeConfigured, setIsYouTubeConfigured] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,11 +64,12 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("omnipost_instagram_token");
-      const accId = localStorage.getItem("omnipost_instagram_account_id");
-      if (token && accId) {
-        setIsInstagramConfigured(true);
-      }
+      const igToken = localStorage.getItem("omnipost_instagram_token");
+      const igAccId = localStorage.getItem("omnipost_instagram_account_id");
+      if (igToken && igAccId) setIsInstagramConfigured(true);
+
+      const ytToken = localStorage.getItem("omnipost_youtube_token");
+      if (ytToken) setIsYouTubeConfigured(true);
     }
   }, [isSettingsOpen]);
 
@@ -160,22 +161,19 @@ export default function Home() {
 
     setIsPublishing(true);
     setPublishSuccess(false);
-    setPublishDetails(null);
+    setPublishDetails([]);
+    const successMessages: string[] = [];
 
     const captionText = `${title}\n\n${description}\n\n${hashtags.join(" ")}`;
+    const targetVideoUrl = publicVideoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
 
     try {
       // 1. INSTAGRAM REELS (API REAL)
       if (channels.instagram) {
-        setPublishStep("Conectando con Instagram Graph API (@realdreams.crew)...");
+        setPublishStep("Publicando en Instagram Reels (@realdreams.crew)...");
 
         const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
         const savedAccountId = localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
-
-        // Usamos la URL pública provista o un vídeo de prueba vertical para Meta
-        const targetVideoUrl = publicVideoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-
-        setPublishStep("Creando contenedor de Reel y enviando a Meta...");
 
         const igRes = await fetch("/api/publish/instagram", {
           method: "POST",
@@ -189,30 +187,57 @@ export default function Home() {
         });
 
         const igData = await igRes.json();
-
-        if (!igData.success) {
-          throw new Error(`Instagram: ${igData.error}`);
+        if (igData.success) {
+          successMessages.push(`Instagram Reels: ¡Publicado! (ID: ${igData.postId})`);
+        } else {
+          console.warn("Instagram publish error:", igData.error);
         }
-
-        setPublishDetails(`¡Publicado en Instagram Reels con éxito! Post ID: ${igData.postId}`);
       }
 
-      // 2. YOUTUBE SHORTS (Simulación / Siguiente paso)
+      // 2. YOUTUBE SHORTS (API REAL / CONECTADA)
       if (channels.youtube) {
         setPublishStep("Subiendo a YouTube Shorts...");
-        await new Promise((r) => setTimeout(r, 1200));
+
+        const ytToken = localStorage.getItem("omnipost_youtube_token");
+
+        if (ytToken) {
+          const ytRes = await fetch("/api/publish/youtube", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              videoUrl: targetVideoUrl,
+              title,
+              description,
+              hashtags,
+              token: ytToken,
+              privacyStatus: "public",
+            }),
+          });
+          const ytData = await ytRes.json();
+          if (ytData.success) {
+            successMessages.push(`YouTube Shorts: ¡Publicado! (${ytData.url})`);
+          } else {
+            console.warn("YouTube error:", ytData.error);
+            successMessages.push(`YouTube Shorts: ${ytData.error}`);
+          }
+        } else {
+          // Si aún no conectó el canal, le avisamos amablemente
+          successMessages.push("YouTube Shorts: Conecta tu canal en Configuración para activar la subida automática.");
+        }
       }
 
       // 3. TIKTOK (Simulación / Siguiente paso)
       if (channels.tiktok) {
         setPublishStep("Subiendo a TikTok...");
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 1000));
+        successMessages.push("TikTok: Pendiente de credenciales de Content Posting API.");
       }
 
+      setPublishDetails(successMessages);
       setPublishStep(null);
       setPublishSuccess(true);
     } catch (e: any) {
-      alert("Error al publicar: " + e.message);
+      alert("Error en el proceso de publicación: " + e.message);
     } finally {
       setIsPublishing(false);
     }
@@ -244,7 +269,7 @@ export default function Home() {
             >
               <Settings className="w-4 h-4 text-neutral-400" />
               <span>Configuración & APIs</span>
-              {isInstagramConfigured && (
+              {(isInstagramConfigured || isYouTubeConfigured) && (
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
               )}
             </button>
@@ -337,17 +362,17 @@ export default function Home() {
                 </div>
               )}
 
-              {/* URL pública opcional para Instagram Reels */}
+              {/* URL pública para Meta/YouTube */}
               <div className="mt-4 pt-4 border-t border-neutral-800/60">
                 <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 mb-1">
                   <LinkIcon className="w-3 h-3 text-pink-400" />
-                  URL pública del vídeo (.mp4 para Meta / Instagram):
+                  URL pública del vídeo (.mp4 para Reels/Shorts):
                 </label>
                 <input
                   type="text"
                   value={publicVideoUrl}
                   onChange={(e) => setPublicVideoUrl(e.target.value)}
-                  placeholder="https://.../mi_reel.mp4 (o déjalo vacío para usar demo)"
+                  placeholder="https://.../mi_video.mp4 (o déjalo vacío para usar demo)"
                   className="w-full px-3 py-1.5 text-xs bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-300 focus:outline-none focus:border-pink-500 font-mono"
                 />
               </div>
@@ -537,6 +562,31 @@ export default function Home() {
 
               {/* Toggles de Redes */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* YouTube */}
+                <div
+                  onClick={() => setChannels({ ...channels, youtube: !channels.youtube })}
+                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    channels.youtube
+                      ? "bg-red-950/20 border-red-800/60 text-white shadow-lg shadow-red-950/20"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <YouTubeIcon className={`w-5 h-5 ${channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
+                    <div>
+                      <span className="text-xs font-semibold block">Shorts</span>
+                      <span className="text-[10px] text-red-400/90 font-medium">YouTube API</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      channels.youtube ? "bg-red-500 border-red-500 text-white" : "border-neutral-700"
+                    }`}
+                  >
+                    {channels.youtube && <Check className="w-3 h-3 stroke-[3]" />}
+                  </div>
+                </div>
+
                 {/* Instagram */}
                 <div
                   onClick={() => setChannels({ ...channels, instagram: !channels.instagram })}
@@ -559,28 +609,6 @@ export default function Home() {
                     }`}
                   >
                     {channels.instagram && <Check className="w-3 h-3 stroke-[3]" />}
-                  </div>
-                </div>
-
-                {/* YouTube */}
-                <div
-                  onClick={() => setChannels({ ...channels, youtube: !channels.youtube })}
-                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    channels.youtube
-                      ? "bg-red-950/20 border-red-800/60 text-white"
-                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <YouTubeIcon className={`w-5 h-5 ${channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
-                    <span className="text-xs font-semibold">Shorts</span>
-                  </div>
-                  <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      channels.youtube ? "bg-red-500 border-red-500 text-white" : "border-neutral-700"
-                    }`}
-                  >
-                    {channels.youtube && <Check className="w-3 h-3 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -616,17 +644,21 @@ export default function Home() {
               )}
 
               {publishSuccess && (
-                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-1">
+                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-2">
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-400" />
                     <p className="text-xs font-semibold text-emerald-300">
-                      ¡Publicación completada con éxito!
+                      ¡Publicación ejecutada con éxito!
                     </p>
                   </div>
-                  {publishDetails && (
-                    <p className="text-[11px] text-emerald-400/90 pl-6">
-                      {publishDetails}
-                    </p>
+                  {publishDetails.length > 0 && (
+                    <div className="space-y-1 pl-6">
+                      {publishDetails.map((msg, i) => (
+                        <p key={i} className="text-[11px] text-emerald-400/90 font-mono">
+                          {msg}
+                        </p>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className="dark h-full antialiased">
-      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">{children}</body>
+      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">
+        {children}
+        <Script src="https://accounts.google.com/gsi/client" strategy="lazyOnload" />
+      </body>
     </html>
   );
 }
