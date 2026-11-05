@@ -19,6 +19,7 @@ import { YouTubeIcon, InstagramIcon, TikTokIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
 
 interface GeneratedData {
+  summary?: string;
   hooks: string[];
   title: string;
   description: string;
@@ -32,6 +33,11 @@ export default function Home() {
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [videoContext, setVideoContext] = useState("");
   const [tone, setTone] = useState("Viral y persuasivo");
+
+  // Fotogramas extraídos para análisis visual con Gemini Vision
+  const [extractedFrames, setExtractedFrames] = useState<string[]>([]);
+  const [isExtractingFrames, setIsExtractingFrames] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string>("");
 
   const [loadingAI, setLoadingAI] = useState(false);
   const [generatedData, setGeneratedData] = useState<GeneratedData | null>(null);
@@ -87,8 +93,80 @@ export default function Home() {
     }
   }, [isSettingsOpen]);
 
+  // Extraer fotogramas clave del vídeo en el navegador usando Canvas
+  const extractFramesFromVideo = (file: File, count = 4): Promise<string[]> => {
+    return new Promise((resolve) => {
+      const video = document.createElement("video");
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      video.muted = true;
+      video.playsInline = true;
+
+      const frames: string[] = [];
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      video.onloadedmetadata = async () => {
+        const duration = video.duration || 1;
+        // Puntos temporales distribuidos a lo largo del vídeo (ej. 15%, 40%, 65%, 85%)
+        const timestamps: number[] = [];
+        for (let i = 1; i <= count; i++) {
+          timestamps.push((duration / (count + 1)) * i);
+        }
+
+        // Redimensionar para optimizar peso (máx 640px de ancho/alto)
+        const maxDim = 640;
+        let w = video.videoWidth || 640;
+        let h = video.videoHeight || 360;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+
+        for (const t of timestamps) {
+          await new Promise<void>((res) => {
+            const onSeeked = () => {
+              video.removeEventListener("seeked", onSeeked);
+              if (ctx) {
+                try {
+                  ctx.drawImage(video, 0, 0, w, h);
+                  frames.push(canvas.toDataURL("image/jpeg", 0.7));
+                } catch (e) {
+                  console.warn("Error capturando fotograma:", e);
+                }
+              }
+              res();
+            };
+            video.addEventListener("seeked", onSeeked);
+            video.currentTime = Math.max(0.1, Math.min(t, duration - 0.1));
+            // timeout de seguridad por si el evento seeked se retrasa
+            setTimeout(() => {
+              video.removeEventListener("seeked", onSeeked);
+              res();
+            }, 1200);
+          });
+        }
+
+        URL.revokeObjectURL(url);
+        resolve(frames);
+      };
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve([]);
+      };
+    });
+  };
+
   // Manejo de archivo de vídeo
-  const handleFileChange = (file: File) => {
+  const handleFileChange = async (file: File) => {
     if (!file.type.startsWith("video/")) {
       alert("Por favor, sube un archivo de vídeo válido (.mp4, .mov, etc.)");
       return;
@@ -97,6 +175,19 @@ export default function Home() {
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
     setPublishSuccess(false);
+    setExtractedFrames([]);
+    setAiSummary("");
+
+    // Extracción automática de fotogramas para visión con Gemini
+    setIsExtractingFrames(true);
+    try {
+      const frames = await extractFramesFromVideo(file, 4);
+      setExtractedFrames(frames);
+    } catch (e) {
+      console.warn("No se pudieron extraer fotogramas automáticamente:", e);
+    } finally {
+      setIsExtractingFrames(false);
+    }
   };
 
   const handleLoadedMetadata = () => {
@@ -116,12 +207,26 @@ export default function Home() {
     }
   };
 
-  // Generar Copy con Gemini
+  // Generar Copy con Gemini analizando fotogramas visuales reales
   const handleGenerateCopy = async () => {
+    if (!videoFile && !videoContext) {
+      alert("Por favor, sube un vídeo o escribe un tema para generar el contenido.");
+      return;
+    }
+
     setLoadingAI(true);
     const savedApiKey = typeof window !== "undefined" ? localStorage.getItem("omnipost_gemini_key") : "";
 
     try {
+      // Si aún no se extrajeron fotogramas y hay un vídeo, extraerlos ahora
+      let framesToSend = extractedFrames;
+      if (videoFile && framesToSend.length === 0) {
+        setIsExtractingFrames(true);
+        framesToSend = await extractFramesFromVideo(videoFile, 4);
+        setExtractedFrames(framesToSend);
+        setIsExtractingFrames(false);
+      }
+
       const res = await fetch("/api/generate-copy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -129,6 +234,7 @@ export default function Home() {
           prompt: videoContext,
           tone,
           apiKey: savedApiKey,
+          frames: framesToSend,
           videoDetails: videoFile
             ? {
                 name: videoFile.name,
@@ -145,6 +251,9 @@ export default function Home() {
         setTitle(json.data.title || "");
         setDescription(json.data.description || "");
         setHashtags(json.data.hashtags || []);
+        if (json.data.summary) {
+          setAiSummary(json.data.summary);
+        }
       } else {
         alert("Error al generar copy: " + (json.error || "Inténtalo de nuevo"));
       }
@@ -152,6 +261,7 @@ export default function Home() {
       alert("Error de conexión: " + err.message);
     } finally {
       setLoadingAI(false);
+      setIsExtractingFrames(false);
     }
   };
 
@@ -387,6 +497,8 @@ export default function Home() {
                         onClick={() => {
                           setVideoFile(null);
                           setVideoUrl(null);
+                          setExtractedFrames([]);
+                          setAiSummary("");
                         }}
                         className="text-red-400 hover:text-red-300"
                       >
@@ -394,6 +506,46 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Estado y Miniaturas de Fotogramas para la IA */}
+                  {isExtractingFrames && (
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-indigo-300 text-xs animate-pulse">
+                      <Sparkles className="w-4 h-4 animate-spin text-amber-300 flex-shrink-0" />
+                      <span>Analizando escenas y extrayendo fotogramas para visión IA...</span>
+                    </div>
+                  )}
+
+                  {extractedFrames.length > 0 && (
+                    <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5 font-medium text-emerald-400">
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          Visión IA: {extractedFrames.length} fotogramas capturados
+                        </span>
+                        <span className="text-[10px] text-neutral-500 font-mono">Gemini Vision</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {extractedFrames.map((frame, idx) => (
+                          <div
+                            key={idx}
+                            className="relative aspect-[9/16] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 group"
+                          >
+                            <img
+                              src={frame}
+                              alt={`Escena ${idx + 1}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <span className="absolute bottom-1 right-1 bg-black/75 backdrop-blur-xs text-[9px] px-1 py-0.2 rounded text-neutral-300 font-mono">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-neutral-400 text-center">
+                        La IA analizará estos fotogramas para redactar el título y descripción exactos de tu vídeo.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -484,6 +636,19 @@ export default function Home() {
                   </span>
                 )}
               </div>
+
+              {/* Lo que Gemini ha detectado visualmente */}
+              {aiSummary && (
+                <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-800/60 space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Análisis visual de Gemini:</span>
+                  </div>
+                  <p className="text-xs text-neutral-200 leading-relaxed bg-neutral-950/60 p-2.5 rounded-lg border border-neutral-800/70">
+                    &ldquo;{aiSummary}&rdquo;
+                  </p>
+                </div>
+              )}
 
               {/* Títulos tipo Gancho / Hooks */}
               {generatedData?.hooks && generatedData.hooks.length > 0 && (
