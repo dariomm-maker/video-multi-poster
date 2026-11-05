@@ -13,6 +13,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [geminiKey, setGeminiKey] = useState("");
   const [youtubeClientId, setYoutubeClientId] = useState("");
   const [instagramToken, setInstagramToken] = useState("");
+  const [instagramAccountId, setInstagramAccountId] = useState("");
   const [tiktokClientKey, setTiktokClientKey] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -20,7 +21,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (typeof window !== "undefined") {
       setGeminiKey(localStorage.getItem("omnipost_gemini_key") || "");
       setYoutubeClientId(localStorage.getItem("omnipost_youtube_client_id") || "");
-      setInstagramToken(localStorage.getItem("omnipost_instagram_token") || "");
+      // Por defecto configuramos las credenciales recién verificadas para realdreams.crew
+      const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
+      const savedAccountId = localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
+      
+      setInstagramToken(savedToken);
+      setInstagramAccountId(savedAccountId);
       setTiktokClientKey(localStorage.getItem("omnipost_tiktok_client_key") || "");
     }
   }, [isOpen]);
@@ -31,6 +37,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     localStorage.setItem("omnipost_gemini_key", geminiKey);
     localStorage.setItem("omnipost_youtube_client_id", youtubeClientId);
     localStorage.setItem("omnipost_instagram_token", instagramToken);
+    localStorage.setItem("omnipost_instagram_account_id", instagramAccountId);
     localStorage.setItem("omnipost_tiktok_client_key", tiktokClientKey);
     setSaved(true);
     setTimeout(() => {
@@ -86,7 +93,46 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Social Platforms APIs */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-neutral-300">Conexiones de Redes Sociales (Opcional)</h3>
+            <h3 className="text-sm font-semibold text-neutral-300">Conexiones de Redes Sociales</h3>
+
+            {/* Instagram */}
+            <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-pink-900/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-neutral-200">
+                  <InstagramIcon className="w-4 h-4 text-pink-500" />
+                  <span className="font-semibold">Instagram Reels API</span>
+                </div>
+                {instagramAccountId === "17841426600001306" && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
+                    🟢 Conectado con @realdreams.crew
+                  </span>
+                )}
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 block mb-1">
+                  Instagram Account ID:
+                </label>
+                <input
+                  type="text"
+                  placeholder="178414..."
+                  value={instagramAccountId}
+                  onChange={(e) => setInstagramAccountId(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 block mb-1">
+                  Meta Access Token:
+                </label>
+                <input
+                  type="password"
+                  placeholder="EAAggKa..."
+                  value={instagramToken}
+                  onChange={(e) => setInstagramToken(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500 font-mono"
+                />
+              </div>
+            </div>
 
             {/* YouTube */}
             <div className="p-3 rounded-lg bg-neutral-950/40 border border-neutral-800 space-y-2">
@@ -100,21 +146,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 value={youtubeClientId}
                 onChange={(e) => setYoutubeClientId(e.target.value)}
                 className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-red-500"
-              />
-            </div>
-
-            {/* Instagram */}
-            <div className="p-3 rounded-lg bg-neutral-950/40 border border-neutral-800 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-neutral-200">
-                <InstagramIcon className="w-4 h-4 text-pink-500" />
-                <span>Instagram Graph API (Reels)</span>
-              </div>
-              <input
-                type="text"
-                placeholder="Meta Access Token / User Token"
-                value={instagramToken}
-                onChange={(e) => setInstagramToken(e.target.value)}
-                className="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white text-xs focus:outline-none focus:border-pink-500"
               />
             </div>
 

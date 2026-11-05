@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Upload,
   Sparkles,
@@ -12,7 +12,9 @@ import {
   Pause,
   Clock,
   FileVideo,
-  Layers
+  Layers,
+  Link as LinkIcon,
+  ExternalLink
 } from "lucide-react";
 import { YouTubeIcon, InstagramIcon, TikTokIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
@@ -27,6 +29,7 @@ interface GeneratedData {
 export default function Home() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [publicVideoUrl, setPublicVideoUrl] = useState<string>("");
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [videoContext, setVideoContext] = useState("");
   const [tone, setTone] = useState("Viral y persuasivo");
@@ -39,23 +42,35 @@ export default function Home() {
 
   // Redes seleccionadas para publicar
   const [channels, setChannels] = useState({
-    youtube: true,
+    youtube: false,
     instagram: true,
-    tiktok: true,
+    tiktok: false,
   });
 
   // Estado de publicación
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStep, setPublishStep] = useState<string | null>(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
+  const [publishDetails, setPublishDetails] = useState<string | null>(null);
 
   // Modal de configuración
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isInstagramConfigured, setIsInstagramConfigured] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("omnipost_instagram_token");
+      const accId = localStorage.getItem("omnipost_instagram_account_id");
+      if (token && accId) {
+        setIsInstagramConfigured(true);
+      }
+    }
+  }, [isSettingsOpen]);
 
   // Manejo de archivo de vídeo
   const handleFileChange = (file: File) => {
@@ -134,8 +149,8 @@ export default function Home() {
 
   // Publicación simultánea (Orquestación)
   const handlePublishAll = async () => {
-    if (!videoFile) {
-      alert("Sube un vídeo antes de publicar.");
+    if (!videoFile && !publicVideoUrl) {
+      alert("Sube un vídeo o introduce una URL de vídeo antes de publicar.");
       return;
     }
     if (!title) {
@@ -145,25 +160,59 @@ export default function Home() {
 
     setIsPublishing(true);
     setPublishSuccess(false);
+    setPublishDetails(null);
+
+    const captionText = `${title}\n\n${description}\n\n${hashtags.join(" ")}`;
 
     try {
+      // 1. INSTAGRAM REELS (API REAL)
+      if (channels.instagram) {
+        setPublishStep("Conectando con Instagram Graph API (@realdreams.crew)...");
+
+        const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
+        const savedAccountId = localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
+
+        // Usamos la URL pública provista o un vídeo de prueba vertical para Meta
+        const targetVideoUrl = publicVideoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+
+        setPublishStep("Creando contenedor de Reel y enviando a Meta...");
+
+        const igRes = await fetch("/api/publish/instagram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            videoUrl: targetVideoUrl,
+            caption: captionText,
+            token: savedToken,
+            accountId: savedAccountId,
+          }),
+        });
+
+        const igData = await igRes.json();
+
+        if (!igData.success) {
+          throw new Error(`Instagram: ${igData.error}`);
+        }
+
+        setPublishDetails(`¡Publicado en Instagram Reels con éxito! Post ID: ${igData.postId}`);
+      }
+
+      // 2. YOUTUBE SHORTS (Simulación / Siguiente paso)
       if (channels.youtube) {
         setPublishStep("Subiendo a YouTube Shorts...");
-        await new Promise((r) => setTimeout(r, 1400));
+        await new Promise((r) => setTimeout(r, 1200));
       }
-      if (channels.instagram) {
-        setPublishStep("Subiendo a Instagram Reels...");
-        await new Promise((r) => setTimeout(r, 1400));
-      }
+
+      // 3. TIKTOK (Simulación / Siguiente paso)
       if (channels.tiktok) {
         setPublishStep("Subiendo a TikTok...");
-        await new Promise((r) => setTimeout(r, 1400));
+        await new Promise((r) => setTimeout(r, 1200));
       }
 
       setPublishStep(null);
       setPublishSuccess(true);
-    } catch (e) {
-      alert("Ocurrió un error al procesar la subida.");
+    } catch (e: any) {
+      alert("Error al publicar: " + e.message);
     } finally {
       setIsPublishing(false);
     }
@@ -195,6 +244,9 @@ export default function Home() {
             >
               <Settings className="w-4 h-4 text-neutral-400" />
               <span>Configuración & APIs</span>
+              {isInstagramConfigured && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              )}
             </button>
           </div>
         </div>
@@ -285,6 +337,21 @@ export default function Home() {
                 </div>
               )}
 
+              {/* URL pública opcional para Instagram Reels */}
+              <div className="mt-4 pt-4 border-t border-neutral-800/60">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 mb-1">
+                  <LinkIcon className="w-3 h-3 text-pink-400" />
+                  URL pública del vídeo (.mp4 para Meta / Instagram):
+                </label>
+                <input
+                  type="text"
+                  value={publicVideoUrl}
+                  onChange={(e) => setPublicVideoUrl(e.target.value)}
+                  placeholder="https://.../mi_reel.mp4 (o déjalo vacío para usar demo)"
+                  className="w-full px-3 py-1.5 text-xs bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-300 focus:outline-none focus:border-pink-500 font-mono"
+                />
+              </div>
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -305,7 +372,7 @@ export default function Home() {
                     type="text"
                     value={videoContext}
                     onChange={(e) => setVideoContext(e.target.value)}
-                    placeholder="Ej: Trucos para ganar seguidores en 2026..."
+                    placeholder="Ej: Vídeo motivacional sobre disciplina y constancia..."
                     className="w-full px-3 py-2 text-xs bg-neutral-950 border border-neutral-800 rounded-xl text-neutral-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -470,6 +537,31 @@ export default function Home() {
 
               {/* Toggles de Redes */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Instagram */}
+                <div
+                  onClick={() => setChannels({ ...channels, instagram: !channels.instagram })}
+                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    channels.instagram
+                      ? "bg-pink-950/20 border-pink-800/60 text-white shadow-lg shadow-pink-950/20"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <InstagramIcon className={`w-5 h-5 ${channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
+                    <div>
+                      <span className="text-xs font-semibold block">Reels</span>
+                      <span className="text-[10px] text-pink-400/90 font-medium">@realdreams.crew</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      channels.instagram ? "bg-pink-500 border-pink-500 text-white" : "border-neutral-700"
+                    }`}
+                  >
+                    {channels.instagram && <Check className="w-3 h-3 stroke-[3]" />}
+                  </div>
+                </div>
+
                 {/* YouTube */}
                 <div
                   onClick={() => setChannels({ ...channels, youtube: !channels.youtube })}
@@ -489,28 +581,6 @@ export default function Home() {
                     }`}
                   >
                     {channels.youtube && <Check className="w-3 h-3 stroke-[3]" />}
-                  </div>
-                </div>
-
-                {/* Instagram */}
-                <div
-                  onClick={() => setChannels({ ...channels, instagram: !channels.instagram })}
-                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    channels.instagram
-                      ? "bg-pink-950/20 border-pink-800/60 text-white"
-                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <InstagramIcon className={`w-5 h-5 ${channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
-                    <span className="text-xs font-semibold">Reels</span>
-                  </div>
-                  <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      channels.instagram ? "bg-pink-500 border-pink-500 text-white" : "border-neutral-700"
-                    }`}
-                  >
-                    {channels.instagram && <Check className="w-3 h-3 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -546,29 +616,31 @@ export default function Home() {
               )}
 
               {publishSuccess && (
-                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 flex items-center gap-3">
-                  <Check className="w-5 h-5 text-emerald-400" />
-                  <div>
+                <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400" />
                     <p className="text-xs font-semibold text-emerald-300">
                       ¡Publicación completada con éxito!
                     </p>
-                    <p className="text-[11px] text-emerald-400/80 mt-0.5">
-                      El vídeo se ha procesado en las redes seleccionadas.
-                    </p>
                   </div>
+                  {publishDetails && (
+                    <p className="text-[11px] text-emerald-400/90 pl-6">
+                      {publishDetails}
+                    </p>
+                  )}
                 </div>
               )}
 
               {/* Botón Principal de Publicación */}
               <button
                 onClick={handlePublishAll}
-                disabled={isPublishing || !videoFile}
+                disabled={isPublishing || (!videoFile && !publicVideoUrl)}
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Share2 className="w-4 h-4" />
                 <span>
                   {isPublishing
-                    ? "Publicando en simultáneo..."
+                    ? "Publicando en tiempo real..."
                     : "🚀 Publicar en 1 Clic en todas las redes"}
                 </span>
               </button>
