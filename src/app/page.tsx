@@ -80,9 +80,22 @@ export default function Home() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const ttToken = urlParams.get("tiktok_token");
+      const ttRefresh = urlParams.get("tiktok_refresh");
       if (ttToken) {
         localStorage.setItem("omnipost_tiktok_token", ttToken);
-        // Limpiamos la URL
+        if (ttRefresh) localStorage.setItem("omnipost_tiktok_refresh", ttRefresh);
+        setIsTikTokConfigured(true);
+      }
+
+      const ytTokenParam = urlParams.get("youtube_token");
+      const ytRefreshParam = urlParams.get("youtube_refresh");
+      if (ytTokenParam) {
+        localStorage.setItem("omnipost_youtube_token", ytTokenParam);
+        if (ytRefreshParam) localStorage.setItem("omnipost_youtube_refresh", ytRefreshParam);
+        setIsYouTubeConfigured(true);
+      }
+
+      if (ttToken || ytTokenParam) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
@@ -94,8 +107,7 @@ export default function Home() {
       if (ytToken) setIsYouTubeConfigured(true);
 
       const savedTtToken = localStorage.getItem("omnipost_tiktok_token");
-      const savedTtKey = localStorage.getItem("omnipost_tiktok_client_key");
-      if (savedTtToken || savedTtKey) setIsTikTokConfigured(true);
+      if (savedTtToken) setIsTikTokConfigured(true);
     }
   }, [isSettingsOpen]);
 
@@ -301,7 +313,7 @@ export default function Home() {
       if (channels.instagram) {
         setPublishStep("Publicando en Instagram Reels (@realdreams.crew)...");
 
-        const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
+        const savedToken = localStorage.getItem("omnipost_instagram_token") || "EAAggKaF9j9EBSwRn5Tghp0AZB9GVFoa2bl1QHrduZCPBOlgegZCOmNullHMpSFCofrwlYahG8xmdZBvaehBCG5VeG8bBqEfudt6VOtVL3wIUnFbZCSjoF0Te8h2DmAxEAZB87GvCBxUTsMCIXADmUMmr60R2XfPlWXtcBiZB4POeKtoyZBS0ZBfNXgcbhVZCvd";
         const savedAccountId = localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
 
         try {
@@ -349,8 +361,9 @@ export default function Home() {
         setPublishStep("Subiendo a YouTube Shorts...");
 
         const ytToken = localStorage.getItem("omnipost_youtube_token");
+        const ytRefreshToken = localStorage.getItem("omnipost_youtube_refresh") || "";
 
-        if (ytToken) {
+        if (ytToken || ytRefreshToken) {
           try {
             const ytRes = await fetch("/api/publish/youtube", {
               method: "POST",
@@ -361,6 +374,7 @@ export default function Home() {
                 description,
                 hashtags,
                 token: ytToken,
+                refreshToken: ytRefreshToken,
                 privacyStatus: "public",
               }),
             });

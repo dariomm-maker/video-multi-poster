@@ -2,9 +2,47 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { videoUrl, title, description, hashtags = [], token, privacyStatus = "public" } = await req.json();
+    const {
+      videoUrl,
+      title,
+      description,
+      hashtags = [],
+      token,
+      refreshToken,
+      privacyStatus = "public",
+    } = await req.json();
 
-    const youtubeToken = token || process.env.YOUTUBE_ACCESS_TOKEN;
+    let youtubeToken = token || process.env.YOUTUBE_ACCESS_TOKEN;
+    const youtubeRefreshToken = refreshToken || process.env.YOUTUBE_REFRESH_TOKEN;
+    const clientId =
+      process.env.YOUTUBE_CLIENT_ID ||
+      "1032994851591-i6lqbe5l4oheq64s4b564oa50ujchrtk.apps.googleusercontent.com";
+    const clientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
+
+    // Función para auto-renovar el token de Google con el Refresh Token permanente
+    async function getFreshGoogleToken(): Promise<string | null> {
+      if (!youtubeRefreshToken || !clientSecret) return null;
+      try {
+        const res = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: youtubeRefreshToken,
+            grant_type: "refresh_token",
+          }).toString(),
+        });
+        const d = await res.json();
+        return d.access_token || null;
+      } catch {
+        return null;
+      }
+    }
+
+    if (!youtubeToken && youtubeRefreshToken) {
+      youtubeToken = (await getFreshGoogleToken()) || undefined;
+    }
 
     if (!youtubeToken) {
       return NextResponse.json(
@@ -46,7 +84,7 @@ export async function POST(req: Request) {
       },
     };
 
-    const initRes = await fetch(
+    let initRes = await fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
       {
         method: "POST",
@@ -58,6 +96,26 @@ export async function POST(req: Request) {
         body: JSON.stringify(metadata),
       }
     );
+
+    // Si el token caducó (401) e intentamos refrescarlo automáticamente:
+    if (initRes.status === 401 && youtubeRefreshToken && clientSecret) {
+      const freshToken = await getFreshGoogleToken();
+      if (freshToken) {
+        youtubeToken = freshToken;
+        initRes = await fetch(
+          "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${youtubeToken}`,
+              "Content-Type": "application/json; charset=UTF-8",
+              "X-Upload-Content-Type": "video/*",
+            },
+            body: JSON.stringify(metadata),
+          }
+        );
+      }
+    }
 
     if (!initRes.ok) {
       const err = await initRes.json().catch(() => ({}));

@@ -54,7 +54,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       // Instagram
       const savedToken =
         localStorage.getItem("omnipost_instagram_token") ||
-        "EAAggKaF9j9EBSwZCdBjf8mnfIC3rWpSnkD9FW4m6zshUCwKpraxAZC0i6uyiiU1emUliqmypAPpiZBn0eHqsXazkZC7FA2ZAsivfw4192cSxEgRDWgHAu3bg2rccneT5gyRVOCrD4z1PvBikZCH1KYj1Rw30mF1NaPCLUjEqx5NqcKK8X7ZCJXVGKtfSYv9gVFCWYgcF3Pn0wFTbvtwqZCagZBs6REgjNxe8NZAwZDZD";
+        "EAAggKaF9j9EBSwRn5Tghp0AZB9GVFoa2bl1QHrduZCPBOlgegZCOmNullHMpSFCofrwlYahG8xmdZBvaehBCG5VeG8bBqEfudt6VOtVL3wIUnFbZCSjoF0Te8h2DmAxEAZB87GvCBxUTsMCIXADmUMmr60R2XfPlWXtcBiZB4POeKtoyZBS0ZBfNXgcbhVZCvd";
       const savedAccountId =
         localStorage.getItem("omnipost_instagram_account_id") || "17841426600001306";
       
@@ -182,7 +182,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </div>
                 {instagramAccountId === "17841426600001306" && (
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/60 font-medium">
-                    🟢 Conectado con @realdreams.crew
+                    🟢 Conectado con @realdreams.crew (Activo hasta Enero)
                   </span>
                 )}
               </div>

@@ -38,8 +38,9 @@ export async function GET(req: Request) {
     const tokenData = await tokenRes.json();
 
     if (tokenData.access_token || tokenData.data?.access_token) {
-      const accessToken = tokenData.access_token || tokenData.data.access_token;
-      return NextResponse.redirect(`${baseUrl}/?tiktok_token=${accessToken}`);
+      const accessToken = tokenData.access_token || tokenData.data?.access_token;
+      const refreshToken = tokenData.refresh_token || tokenData.data?.refresh_token || "";
+      return NextResponse.redirect(`${baseUrl}/?tiktok_token=${accessToken}&tiktok_refresh=${refreshToken}`);
     } else {
       console.error("TikTok token error:", tokenData);
       return NextResponse.redirect(
