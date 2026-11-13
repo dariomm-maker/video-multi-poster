@@ -17,12 +17,12 @@ export async function POST(req: Request) {
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
-      const file = formData.get("media") as File | null || formData.get("video") as File | null;
+      const file = (formData.get("media") as File | null) || (formData.get("video") as File | null);
       title = (formData.get("title") as string) || "Publicación";
       description = (formData.get("description") as string) || "";
       const rawTags = formData.get("hashtags") as string;
       formattedHashtags = rawTags || "";
-      selectedPlatforms = (formData.get("platforms") as string) || "tiktok,instagram,youtube,x";
+      selectedPlatforms = (formData.get("platforms") as string) || "tiktok,instagram,facebook,youtube,x";
       profile = (formData.get("profile") as string) || "mi_marca";
       postType = (formData.get("postType") as string) || "video";
 
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       description = body.description || "";
       const tags = body.hashtags || [];
       formattedHashtags = Array.isArray(tags) ? tags.join(" ") : tags || "";
-      const plats = body.platforms || ["tiktok", "instagram", "youtube", "x"];
+      const plats = body.platforms || ["tiktok", "instagram", "facebook", "youtube", "x"];
       selectedPlatforms = Array.isArray(plats) ? plats.join(",") : plats;
       profile = body.profile || "mi_marca";
       postType = body.postType || "video";
@@ -61,7 +61,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const scriptPath = path.resolve("..", "social-uploader", "publish_cli.py");
+    const scriptDir = path.resolve("..", "social-uploader");
+    const scriptPath = path.join(scriptDir, "publish_cli.py");
 
     if (!fs.existsSync(scriptPath)) {
       return NextResponse.json(
@@ -73,18 +74,25 @@ export async function POST(req: Request) {
       );
     }
 
-    // Escapar comillas para la línea de comandos
-    const safeTitle = (title || "Publicación").replace(/"/g, '\\"');
-    const safeDesc = (description || "").replace(/"/g, '\\"');
-    const safeTags = (formattedHashtags || "").replace(/"/g, '\\"');
-    const safeProfile = (profile || "mi_marca").replace(/"/g, "");
+    // Escribir archivo JSON payload temporal para evitar errores con saltos de línea y comillas en Windows
+    const payloadPath = path.join(scriptDir, `payload_${Date.now()}.json`);
+    const payloadContent = {
+      mediaPath,
+      postType,
+      title,
+      description,
+      hashtags: formattedHashtags,
+      platforms: selectedPlatforms,
+      profile,
+    };
 
-    const cmd = `python "${scriptPath}" --media "${mediaPath}" --post_type "${postType}" --title "${safeTitle}" --description "${safeDesc}" --hashtags "${safeTags}" --platforms "${selectedPlatforms}" --profile "${safeProfile}"`;
+    fs.writeFileSync(payloadPath, JSON.stringify(payloadContent, null, 2), "utf-8");
 
-    console.log("Ejecutando robot de subida local:", cmd);
+    const cmd = `python "${scriptPath}" --payload "${payloadPath}"`;
+    console.log("Ejecutando robot de subida local:", cmd, "Perfil:", profile);
 
     return new Promise<NextResponse>((resolve) => {
-      exec(cmd, { cwd: path.dirname(scriptPath), maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+      exec(cmd, { cwd: scriptDir, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         console.log("Salida del robot:", stdout);
         if (stderr) console.error("Errores del robot:", stderr);
 
