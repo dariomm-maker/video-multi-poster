@@ -13,9 +13,12 @@ import {
   Clock,
   FileVideo,
   Layers,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Bot,
+  UserCheck,
+  RefreshCw,
 } from "lucide-react";
-import { YouTubeIcon, InstagramIcon, TikTokIcon } from "@/components/Icons";
+import { YouTubeIcon, InstagramIcon, TikTokIcon, XIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
 
 interface GeneratedData {
@@ -57,7 +60,54 @@ export default function Home() {
     youtube: true,
     instagram: true,
     tiktok: true,
+    x: true,
   });
+
+  // Perfiles / Clientes para multi-cuenta
+  const [profiles, setProfiles] = useState<
+    Array<{
+      id: string;
+      name: string;
+      networks?: { tiktok: boolean; instagram: boolean; youtube: boolean; x: boolean };
+    }>
+  >([
+    {
+      id: "mi_marca",
+      name: "Mi Marca (@realdreams.crew)",
+      networks: { tiktok: true, instagram: true, youtube: true, x: false },
+    },
+  ]);
+  const [selectedProfile, setSelectedProfile] = useState<string>("mi_marca");
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
+
+  // Cargar perfiles configurados desde el robot local
+  const fetchProfiles = async () => {
+    setIsLoadingProfiles(true);
+    try {
+      const res = await fetch("/api/profiles");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.profiles) && data.profiles.length > 0) {
+        setProfiles(data.profiles);
+        const saved = typeof window !== "undefined" ? localStorage.getItem("omnipost_selected_profile") : null;
+        if (saved && data.profiles.some((p: any) => p.id === saved)) {
+          setSelectedProfile(saved);
+        } else {
+          setSelectedProfile(data.profiles[0].id);
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudieron cargar perfiles locales:", e);
+    } finally {
+      setIsLoadingProfiles(false);
+    }
+  };
+
+  const handleProfileChange = (id: string) => {
+    setSelectedProfile(id);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("omnipost_selected_profile", id);
+    }
+  };
 
   // Estado de publicación
   const [isPublishing, setIsPublishing] = useState(false);
@@ -108,6 +158,9 @@ export default function Home() {
 
       const savedTtToken = localStorage.getItem("omnipost_tiktok_token");
       if (savedTtToken) setIsTikTokConfigured(true);
+
+      // Cargar lista de perfiles locales
+      fetchProfiles();
     }
   }, [isSettingsOpen]);
 
@@ -469,6 +522,85 @@ export default function Home() {
       alert("Error en el proceso de publicación: " + e.message);
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  // Publicación con el Robot Local (Sin límites de API ni tokens que expiran)
+  const handlePublishWithBot = async () => {
+    if (!videoFile) {
+      alert("Por favor arrastra o sube un archivo de vídeo antes de publicar con el robot.");
+      return;
+    }
+    if (!title) {
+      alert("Por favor define o genera un título para el vídeo.");
+      return;
+    }
+
+    const activeChannels = Object.entries(channels)
+      .filter(([_, active]) => active)
+      .map(([k]) => k);
+
+    if (activeChannels.length === 0) {
+      alert("Selecciona al menos una red social donde publicar.");
+      return;
+    }
+
+    setIsPublishing(true);
+    const activeProfileObj = profiles.find((p) => p.id === selectedProfile);
+    const profileLabel = activeProfileObj ? activeProfileObj.name : selectedProfile;
+
+    setPublishStep(`Iniciando robot para '${profileLabel}'...`);
+    setPublishReports([]);
+
+    try {
+      const formData = new FormData();
+      formData.append("video", videoFile);
+      formData.append("title", title);
+      formData.append("description", description);
+      formData.append("hashtags", hashtags.join(" "));
+      formData.append("platforms", activeChannels.join(","));
+      formData.append("profile", selectedProfile);
+
+      setPublishStep(`El robot está abriendo Chrome para subir a ${activeChannels.map((c) => c.toUpperCase()).join(", ")}...`);
+
+      const res = await fetch("/api/publish/bot", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      const reports: PublishReportItem[] = [];
+
+      if (json.results && typeof json.results === "object") {
+        for (const [platform, result] of Object.entries<any>(json.results)) {
+          reports.push({
+            channel: platform,
+            success: result.success,
+            message: result.message || result.error || "Completado",
+          });
+        }
+      } else {
+        reports.push({
+          channel: "Robot de Publicación",
+          success: json.success,
+          message: json.success
+            ? "¡Publicación completada en todas las redes con éxito!"
+            : (json.error || "Hubo un error al ejecutar el robot"),
+        });
+      }
+
+      setPublishReports(reports);
+    } catch (err: any) {
+      setPublishReports([
+        {
+          channel: "Robot Local",
+          success: false,
+          message: `Error de conexión con el robot local: ${err.message}`,
+        },
+      ]);
+    } finally {
+      setIsPublishing(false);
+      setPublishStep(null);
     }
   };
 
@@ -840,84 +972,147 @@ export default function Home() {
                 3. Publicación Simultánea
               </h2>
 
+              {/* Selector de Perfil / Marca / Cliente */}
+              <div className="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-indigo-400" />
+                    <span>Perfil o Cliente Destino:</span>
+                  </label>
+                  <button
+                    onClick={fetchProfiles}
+                    disabled={isLoadingProfiles}
+                    title="Actualizar lista de perfiles"
+                    className="text-[11px] text-neutral-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingProfiles ? "animate-spin" : ""}`} />
+                    <span>Actualizar</span>
+                  </button>
+                </div>
+
+                <select
+                  value={selectedProfile}
+                  onChange={(e) => handleProfileChange(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-700/80 rounded-xl px-3 py-2.5 text-xs text-white font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.id})
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center justify-between text-[11px] text-neutral-500">
+                  <span>
+                    Carpeta: <span className="font-mono text-neutral-400">profiles/{selectedProfile}/</span>
+                  </span>
+                  <span className="text-indigo-400 font-medium">Multi-cuenta activo</span>
+                </div>
+              </div>
+
               <p className="text-xs text-neutral-400">
                 Selecciona las plataformas donde deseas publicar este vídeo en simultáneo:
               </p>
 
-              {/* Toggles de las 3 Redes */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Toggles de las 4 Redes */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {/* YouTube */}
                 <div
                   onClick={() => setChannels({ ...channels, youtube: !channels.youtube })}
-                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                     channels.youtube
                       ? "bg-red-950/20 border-red-800/60 text-white shadow-lg shadow-red-950/20"
                       : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <YouTubeIcon className={`w-5 h-5 ${channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
+                  <div className="flex items-center gap-2">
+                    <YouTubeIcon className={`w-4 h-4 ${channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">Shorts</span>
-                      <span className="text-[10px] text-red-400/90 font-medium">YouTube API</span>
+                      <span className="text-[10px] text-red-400/90 font-medium">YouTube</span>
                     </div>
                   </div>
                   <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                       channels.youtube ? "bg-red-500 border-red-500 text-white" : "border-neutral-700"
                     }`}
                   >
-                    {channels.youtube && <Check className="w-3 h-3 stroke-[3]" />}
+                    {channels.youtube && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 {/* Instagram */}
                 <div
                   onClick={() => setChannels({ ...channels, instagram: !channels.instagram })}
-                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                     channels.instagram
                       ? "bg-pink-950/20 border-pink-800/60 text-white shadow-lg shadow-pink-950/20"
                       : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <InstagramIcon className={`w-5 h-5 ${channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
+                  <div className="flex items-center gap-2">
+                    <InstagramIcon className={`w-4 h-4 ${channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">Reels</span>
-                      <span className="text-[10px] text-pink-400/90 font-medium">@realdreams.crew</span>
+                      <span className="text-[10px] text-pink-400/90 font-medium">Instagram</span>
                     </div>
                   </div>
                   <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                       channels.instagram ? "bg-pink-500 border-pink-500 text-white" : "border-neutral-700"
                     }`}
                   >
-                    {channels.instagram && <Check className="w-3 h-3 stroke-[3]" />}
+                    {channels.instagram && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 {/* TikTok */}
                 <div
                   onClick={() => setChannels({ ...channels, tiktok: !channels.tiktok })}
-                  className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                     channels.tiktok
                       ? "bg-cyan-950/20 border-cyan-800/60 text-white shadow-lg shadow-cyan-950/20"
                       : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <TikTokIcon className={`w-5 h-5 ${channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
+                  <div className="flex items-center gap-2">
+                    <TikTokIcon className={`w-4 h-4 ${channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">TikTok</span>
-                      <span className="text-[10px] text-cyan-400/90 font-medium">Content API</span>
+                      <span className="text-[10px] text-cyan-400/90 font-medium">Video</span>
                     </div>
                   </div>
                   <div
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                       channels.tiktok ? "bg-cyan-500 border-cyan-500 text-black" : "border-neutral-700"
                     }`}
                   >
-                    {channels.tiktok && <Check className="w-3 h-3 stroke-[3]" />}
+                    {channels.tiktok && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                {/* X (Twitter) */}
+                <div
+                  onClick={() => setChannels({ ...channels, x: !channels.x })}
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    channels.x
+                      ? "bg-neutral-800 border-neutral-600 text-white shadow-lg shadow-neutral-900/40"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <XIcon className={`w-4 h-4 ${channels.x ? "text-white" : "text-neutral-500"}`} />
+                    <div>
+                      <span className="text-xs font-semibold block">X (Twitter)</span>
+                      <span className="text-[10px] text-neutral-400 font-medium">Post</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                      channels.x ? "bg-white border-white text-black" : "border-neutral-700"
+                    }`}
+                  >
+                    {channels.x && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
               </div>
@@ -952,7 +1147,7 @@ export default function Home() {
                           ? "¡Vídeo publicado con éxito en todas las redes!"
                           : publishReports.some((r) => r.success)
                           ? "Publicación parcial completada:"
-                          : "Informe de publicación (Acción requerida):"}
+                          : "Informe de publicación:"}
                       </p>
                     </div>
                     {publishReports.some((r) => !r.success && r.actionRequired) && (
@@ -1003,19 +1198,30 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Botón Principal de Publicación */}
+              {/* Botón Principal: Robot Autónomo Local */}
               <button
-                onClick={handlePublishAll}
-                disabled={isPublishing || (!videoFile && !publicVideoUrl)}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={handlePublishWithBot}
+                disabled={isPublishing || !videoFile}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Share2 className="w-4 h-4" />
+                <Bot className="w-4 h-4" />
                 <span>
                   {isPublishing
-                    ? "Publicando en tiempo real..."
-                    : "🚀 Publicar en 1 Clic en todas las redes"}
+                    ? "Robot publicando en segundo plano..."
+                    : `🤖 Publicar con Robot en "${profiles.find((p) => p.id === selectedProfile)?.name || selectedProfile}"`}
                 </span>
               </button>
+
+              {/* Opción secundaria: APIs Directas OAuth */}
+              <div className="pt-1 text-center">
+                <button
+                  onClick={handlePublishAll}
+                  disabled={isPublishing || (!videoFile && !publicVideoUrl)}
+                  className="text-xs text-neutral-400 hover:text-neutral-200 underline decoration-neutral-700 hover:decoration-neutral-400 transition-colors"
+                >
+                  O publicar mediante APIs directas (OAuth Cloud)
+                </button>
+              </div>
             </div>
           </div>
         </div>

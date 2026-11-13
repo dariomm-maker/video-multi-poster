@@ -5,13 +5,53 @@ import fs from "fs";
 
 export async function POST(req: Request) {
   try {
-    const { videoPath, title, description, hashtags = [], platforms = ["tiktok", "instagram", "youtube", "x"] } = await req.json();
+    let videoPath = "";
+    let title = "Video Viral";
+    let description = "";
+    let formattedHashtags = "";
+    let selectedPlatforms = "tiktok,instagram,youtube,x";
+    let profile = "mi_marca";
+
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("video") as File | null;
+      title = (formData.get("title") as string) || "Video Viral";
+      description = (formData.get("description") as string) || "";
+      const rawTags = formData.get("hashtags") as string;
+      formattedHashtags = rawTags || "";
+      selectedPlatforms = (formData.get("platforms") as string) || "tiktok,instagram,youtube,x";
+      profile = (formData.get("profile") as string) || "mi_marca";
+
+      if (file) {
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const scriptDir = path.resolve("..", "social-uploader");
+        const tempFileName = `temp_upload_${Date.now()}.mp4`;
+        videoPath = path.join(scriptDir, tempFileName);
+        fs.writeFileSync(videoPath, buffer);
+      } else {
+        const passedPath = formData.get("videoPath") as string;
+        if (passedPath) videoPath = passedPath;
+      }
+    } else {
+      const body = await req.json();
+      videoPath = body.videoPath || "";
+      title = body.title || "Video Viral";
+      description = body.description || "";
+      const tags = body.hashtags || [];
+      formattedHashtags = Array.isArray(tags) ? tags.join(" ") : tags || "";
+      const plats = body.platforms || ["tiktok", "instagram", "youtube", "x"];
+      selectedPlatforms = Array.isArray(plats) ? plats.join(",") : plats;
+      profile = body.profile || "mi_marca";
+    }
 
     if (!videoPath || !fs.existsSync(videoPath)) {
       return NextResponse.json(
         {
           success: false,
-          error: `No se encuentra el archivo de vídeo en la ruta local: ${videoPath || "vacía"}`,
+          error: `No se encuentra el archivo de vídeo para subir: ${videoPath || "ninguno recibido"}`,
         },
         { status: 400 }
       );
@@ -29,37 +69,48 @@ export async function POST(req: Request) {
       );
     }
 
-    const formattedHashtags = Array.isArray(hashtags) ? hashtags.join(" ") : hashtags;
-    const selectedPlatforms = Array.isArray(platforms) ? platforms.join(",") : platforms;
-
     // Escapar comillas para la línea de comandos
     const safeTitle = (title || "Video Viral").replace(/"/g, '\\"');
     const safeDesc = (description || "").replace(/"/g, '\\"');
     const safeTags = (formattedHashtags || "").replace(/"/g, '\\"');
+    const safeProfile = (profile || "mi_marca").replace(/"/g, "");
 
-    const cmd = `python "${scriptPath}" --video "${videoPath}" --title "${safeTitle}" --description "${safeDesc}" --hashtags "${safeTags}" --platforms "${selectedPlatforms}"`;
+    const cmd = `python "${scriptPath}" --video "${videoPath}" --title "${safeTitle}" --description "${safeDesc}" --hashtags "${safeTags}" --platforms "${selectedPlatforms}" --profile "${safeProfile}"`;
 
     console.log("Ejecutando robot de subida local:", cmd);
 
     return new Promise<NextResponse>((resolve) => {
-      exec(cmd, { cwd: path.dirname(scriptPath) }, (error, stdout, stderr) => {
+      exec(cmd, { cwd: path.dirname(scriptPath), maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         console.log("Salida del robot:", stdout);
         if (stderr) console.error("Errores del robot:", stderr);
+
+        // Intentar parsear el JSON de resultados de stdout
+        let results = null;
+        try {
+          const match = stdout.match(/--- RESULTADOS FINALES ---\s*([\s\S]*)$/);
+          if (match && match[1]) {
+            results = JSON.parse(match[1].trim());
+          }
+        } catch {
+          // Si no se puede parsear, pasamos la salida en crudo
+        }
 
         if (error) {
           resolve(
             NextResponse.json({
               success: false,
-              error: `Error ejecutando el robot: ${error.message}`,
+              error: `Error durante la ejecución del robot: ${error.message}`,
               output: stdout,
+              results,
             })
           );
         } else {
           resolve(
             NextResponse.json({
               success: true,
-              message: "Proceso del robot finalizado.",
+              message: "Proceso del robot finalizado con éxito.",
               output: stdout,
+              results,
             })
           );
         }
