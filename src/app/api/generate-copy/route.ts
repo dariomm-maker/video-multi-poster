@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 export async function POST(req: Request) {
   try {
-    const { prompt, videoDetails, apiKey: userApiKey, tone, frames = [] } = await req.json();
+    const { prompt, videoDetails, apiKey: userApiKey, tone, frames = [], postType = "video" } = await req.json();
 
     const apiKey = userApiKey || process.env.GEMINI_API_KEY;
 
@@ -19,40 +19,43 @@ export async function POST(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const systemInstruction = `
-Eres un estratega experto en marketing viral para YouTube Shorts, Instagram Reels y TikTok.
-Tu objetivo es analizar minuciosamente el vídeo provisto (sus fotogramas reales, subtítulos, ambiente, protagonista, acciones y temática) para crear la estrategia de publicación más efectiva y viral posible.
+    const isImage = postType === "image";
+    const isText = postType === "text";
 
-Instrucciones de análisis:
-1. Si recibes fotogramas del vídeo, analízalos detalladamente: ¿Qué ocurre? ¿Qué se ve? ¿Hay texto en pantalla? ¿Quién aparece? ¿Qué producto, lección o emoción transmite?
-2. Redacta el contenido en español, optimizado para máxima retención de audiencia y posicionamiento en buscadores (SEO).
+    const systemInstruction = `
+Eres un estratega experto en marketing digital y creación de contenido viral para redes sociales (Instagram, TikTok, YouTube Shorts y X / Twitter).
+Tu objetivo es analizar minuciosamente el contenido multimedia o tema provisto (${isImage ? "imagen fija para post de feed" : isText ? "post de texto" : "vídeo vertical"}) para crear la publicación más atractiva y efectiva posible.
+
+Instrucciones:
+1. ${isImage ? "Analiza la imagen recibida: colores, protagonistas, estilo, detalles, contexto y mensaje." : isText ? "Desarrolla el tema con ganchos persuasivos." : "Analiza los fotogramas del vídeo, acciones, ambiente y emociones."}
+2. Redacta el contenido en español, optimizado para alto engagement, comentarios y guardados.
 3. Adapta el contenido al tono: ${tone || "Viral y persuasivo"}.
 
 Debes responder estrictamente en formato JSON válido con la siguiente estructura:
 {
-  "summary": "Breve resumen en 1 frase de lo que la IA vio en el vídeo",
+  "summary": "Breve resumen en 1 frase de lo que se ve o el mensaje central",
   "hooks": [
-    "Gancho 1 ultra llamativo (menos de 60 caracteres)",
+    "Gancho 1 llamativo y directo",
     "Gancho 2 con pregunta intrigante o curiosidad",
     "Gancho 3 de advertencia o beneficio directo"
   ],
-  "title": "Título principal recomendado con emojis y palabras clave (máximo 60 caracteres)",
-  "description": "Descripción persuasiva de 2 a 4 frases explicando de qué trata el vídeo e incluyendo una llamada a la acción clara.",
-  "hashtags": ["#viral", "#shorts", "#reels", "#fyp", "#tagEspecifico1", "#tagEspecifico2", "#tagEspecifico3"]
+  "title": "Título o primera línea del post con emojis y gancho (máximo 60 caracteres)",
+  "description": "Texto completo y persuasivo para el pie de foto / cuerpo del post, con formato agradable, saltos de línea y una llamada a la acción clara.",
+  "hashtags": ["#viral", "#post", "#instagram", "#tendencia", "#tag1", "#tag2", "#tag3"]
 }
 `;
 
     const userPrompt = `
-Detalles del archivo:
-- Nombre: ${videoDetails?.name || "video.mp4"}
-- Duración: ${videoDetails?.duration ? `${Math.round(videoDetails.duration)} segundos` : "No especificada"}
-- Contexto o tema adicional indicado por el creador: ${prompt || "Sin contexto adicional, analiza directamente el contenido visual del vídeo"}
-${frames.length > 0 ? `\nSe te adjuntan ${frames.length} fotogramas clave extraídos del vídeo a lo largo de su duración. Analízalos para comprender qué ocurre exactamente en el vídeo.` : ""}
+Tipo de publicación: ${postType.toUpperCase()}
+Detalles:
+- Archivo: ${videoDetails?.name || (isImage ? "imagen.jpg" : isText ? "solo texto" : "video.mp4")}
+${videoDetails?.duration ? `- Duración: ${Math.round(videoDetails.duration)}s` : ""}
+- Contexto o idea del autor: ${prompt || "Analiza directamente el contenido visual"}
+${frames.length > 0 ? `\nSe te adjuntan ${frames.length} imagen(es) para su análisis visual.` : ""}
 
-Genera la estrategia de publicación ahora en formato JSON.
+Genera la estrategia y copy de publicación ahora en formato JSON.
 `;
 
-    // Estructuramos el contenido multimodal (fotogramas + texto)
     const contents: any[] = [];
 
     if (Array.isArray(frames) && frames.length > 0) {
@@ -73,7 +76,6 @@ Genera la estrategia de publicación ahora en formato JSON.
       text: userPrompt,
     });
 
-    // Modelos con capacidad visual multimodal
     const modelsToTry = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
     let lastError: any = null;
 
@@ -98,29 +100,30 @@ Genera la estrategia de publicación ahora en formato JSON.
           analyzedFramesCount: frames.length,
           data: {
             summary: data.summary || "",
-            hooks: data.hooks || [
-              data.hook || "🔥 ¡El secreto que cambiará tus resultados hoy!",
-              "👀 No cometas este error en tus vídeos",
-              "🚀 3 Claves indispensables que necesitas conocer"
-            ],
-            title: data.title || "🔥 ¡El método viral definitivo!",
-            description: data.description || "Aplica estos trucos en tu contenido hoy mismo. Guárdalo para no olvidarlo.",
-            hashtags: data.hashtags || ["#viral", "#shorts", "#reels", "#tiktok", "#tendencia"],
+            hooks: Array.isArray(data.hooks) ? data.hooks : [],
+            title: data.title || "",
+            description: data.description || "",
+            hashtags: Array.isArray(data.hashtags) ? data.hashtags : [],
           },
         });
       } catch (err: any) {
+        console.warn(`Fallo con el modelo ${model}:`, err.message);
         lastError = err;
-        console.warn(`Error con el modelo ${model}, probando siguiente...`, err.message);
       }
     }
 
-    throw lastError || new Error("No se pudo analizar el vídeo con Gemini AI.");
-  } catch (error: any) {
-    console.error("Error generating copy with Gemini:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Error al conectar con la API de Gemini",
+        error: `No se pudo generar el copy con Gemini: ${lastError?.message || "Error desconocido"}`,
+      },
+      { status: 500 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Error interno del servidor",
       },
       { status: 500 }
     );

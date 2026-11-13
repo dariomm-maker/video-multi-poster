@@ -17,6 +17,9 @@ import {
   Bot,
   UserCheck,
   RefreshCw,
+  Image as ImageIcon,
+  Type,
+  Trash2,
 } from "lucide-react";
 import { YouTubeIcon, InstagramIcon, TikTokIcon, XIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
@@ -37,8 +40,11 @@ interface PublishReportItem {
 }
 
 export default function Home() {
+  const [postType, setPostType] = useState<"video" | "image" | "text">("video");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [publicVideoUrl, setPublicVideoUrl] = useState<string>("");
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [videoContext, setVideoContext] = useState("");
@@ -122,8 +128,31 @@ export default function Home() {
   const [isTikTokConfigured, setIsTikTokConfigured] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Manejo de archivo de imagen para posts tradicionales
+  const handleImageChange = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Por favor, sube un archivo de imagen válido (.jpg, .png, .webp)");
+      return;
+    }
+    setImageFile(file);
+    const url = URL.createObjectURL(file);
+    setImageUrl(url);
+    setPublishReports([]);
+    setExtractedFrames([]);
+    setAiSummary("");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setExtractedFrames([reader.result]);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Comprobar parámetros de retorno de OAuth y estado de conexiones
   useEffect(() => {
@@ -278,10 +307,11 @@ export default function Home() {
     }
   };
 
-  // Generar Copy con Gemini analizando fotogramas visuales reales
+  // Generar Copy con Gemini analizando multimedia o texto
   const handleGenerateCopy = async () => {
-    if (!videoFile && !videoContext) {
-      alert("Por favor, sube un vídeo o escribe un tema para generar el contenido.");
+    const activeFile = postType === "image" ? imageFile : postType === "video" ? videoFile : null;
+    if (!activeFile && !videoContext && postType !== "text") {
+      alert(`Por favor, sube ${postType === "image" ? "una imagen" : "un vídeo"} o escribe un tema para generar el contenido.`);
       return;
     }
 
@@ -289,9 +319,9 @@ export default function Home() {
     const savedApiKey = typeof window !== "undefined" ? localStorage.getItem("omnipost_gemini_key") : "";
 
     try {
-      // Si aún no se extrajeron fotogramas y hay un vídeo, extraerlos ahora
+      // Si es vídeo y aún no se extrajeron fotogramas, extraerlos ahora
       let framesToSend = extractedFrames;
-      if (videoFile && framesToSend.length === 0) {
+      if (postType === "video" && videoFile && framesToSend.length === 0) {
         setIsExtractingFrames(true);
         framesToSend = await extractFramesFromVideo(videoFile, 4);
         setExtractedFrames(framesToSend);
@@ -306,11 +336,12 @@ export default function Home() {
           tone,
           apiKey: savedApiKey,
           frames: framesToSend,
-          videoDetails: videoFile
+          postType,
+          videoDetails: activeFile
             ? {
-                name: videoFile.name,
-                duration: videoDuration,
-                size: (videoFile.size / (1024 * 1024)).toFixed(2) + " MB",
+                name: activeFile.name,
+                duration: postType === "video" ? videoDuration : null,
+                size: (activeFile.size / (1024 * 1024)).toFixed(2) + " MB",
               }
             : null,
         }),
@@ -525,14 +556,16 @@ export default function Home() {
     }
   };
 
-  // Publicación con el Robot Local (Sin límites de API ni tokens que expiran)
+  // Publicación con el Robot Local (Vídeos, Posts de Imagen y Texto)
   const handlePublishWithBot = async () => {
-    if (!videoFile) {
-      alert("Por favor arrastra o sube un archivo de vídeo antes de publicar con el robot.");
+    const activeMedia = postType === "image" ? imageFile : postType === "video" ? videoFile : null;
+
+    if (postType !== "text" && !activeMedia) {
+      alert(`Por favor arrastra o sube un archivo de ${postType === "image" ? "imagen (.jpg, .png)" : "vídeo (.mp4)"} antes de publicar.`);
       return;
     }
-    if (!title) {
-      alert("Por favor define o genera un título para el vídeo.");
+    if (!title && !description) {
+      alert("Por favor define o genera un título o texto para el post.");
       return;
     }
 
@@ -549,19 +582,22 @@ export default function Home() {
     const activeProfileObj = profiles.find((p) => p.id === selectedProfile);
     const profileLabel = activeProfileObj ? activeProfileObj.name : selectedProfile;
 
-    setPublishStep(`Iniciando robot para '${profileLabel}'...`);
+    setPublishStep(`Iniciando robot para '${profileLabel}' (${postType.toUpperCase()})...`);
     setPublishReports([]);
 
     try {
       const formData = new FormData();
-      formData.append("video", videoFile);
+      if (activeMedia) {
+        formData.append("media", activeMedia);
+      }
       formData.append("title", title);
       formData.append("description", description);
       formData.append("hashtags", hashtags.join(" "));
       formData.append("platforms", activeChannels.join(","));
       formData.append("profile", selectedProfile);
+      formData.append("postType", postType);
 
-      setPublishStep(`El robot está abriendo Chrome para subir a ${activeChannels.map((c) => c.toUpperCase()).join(", ")}...`);
+      setPublishStep(`El robot está abriendo Chrome para publicar en ${activeChannels.map((c) => c.toUpperCase()).join(", ")}...`);
 
       const res = await fetch("/api/publish/bot", {
         method: "POST",
@@ -640,145 +676,297 @@ export default function Home() {
 
       {/* Contenido Principal */}
       <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Selector de Modo: Vídeo Reel vs Post con Foto vs Solo Texto */}
+        <div className="flex items-center justify-center mb-8">
+          <div className="inline-flex p-1.5 rounded-2xl bg-neutral-900/90 border border-neutral-800 shadow-xl gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPostType("video");
+                setChannels({ youtube: true, instagram: true, tiktok: true, x: true });
+              }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                postType === "video"
+                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              <FileVideo className="w-4 h-4" />
+              <span>🎬 Reel / Vídeo Vertical</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPostType("image");
+                setChannels({ youtube: false, instagram: true, tiktok: true, x: true });
+              }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                postType === "image"
+                  ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-lg shadow-pink-600/30"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>📸 Post con Foto / Imagen</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPostType("text");
+                setChannels({ youtube: false, instagram: false, tiktok: false, x: true });
+              }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                postType === "text"
+                  ? "bg-gradient-to-r from-neutral-700 to-neutral-800 text-white shadow-lg shadow-neutral-800/40"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              <Type className="w-4 h-4" />
+              <span>📝 Post de Solo Texto</span>
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* COLUMNA IZQUIERDA: Subida y Reproductor de Vídeo */}
+          {/* COLUMNA IZQUIERDA: Subida Multimedia o Modo Texto */}
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-2xl p-6 backdrop-blur shadow-sm">
               <h2 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
-                <FileVideo className="w-5 h-5 text-indigo-400" />
-                1. Archivo de Vídeo
+                {postType === "video" && <FileVideo className="w-5 h-5 text-indigo-400" />}
+                {postType === "image" && <ImageIcon className="w-5 h-5 text-pink-400" />}
+                {postType === "text" && <Type className="w-5 h-5 text-cyan-400" />}
+                <span>
+                  {postType === "video" && "1. Archivo de Vídeo (Reel / Short)"}
+                  {postType === "image" && "1. Foto o Imagen del Post"}
+                  {postType === "text" && "1. Modo Post de Texto"}
+                </span>
               </h2>
               <p className="text-xs text-neutral-400 mb-4">
-                Sube tu vídeo en formato vertical (9:16) para Shorts, Reels y TikTok.
+                {postType === "video" && "Sube tu vídeo vertical (9:16) para Shorts, Reels y TikTok."}
+                {postType === "image" && "Sube tu foto o diseño (1:1 o 4:5) para el feed de Instagram y X."}
+                {postType === "text" && "Crea un post directo o hilo para publicar en X (Twitter)."}
               </p>
 
-              {/* Zona de Drop o Vista previa */}
-              {!videoUrl ? (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (e.dataTransfer.files?.[0]) {
-                      handleFileChange(e.dataTransfer.files[0]);
-                    }
-                  }}
-                  className="border-2 border-dashed border-neutral-700/80 hover:border-indigo-500/80 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 text-center cursor-pointer transition-all bg-neutral-950/40 hover:bg-neutral-950/80 group"
-                >
-                  <div className="w-14 h-14 rounded-full bg-neutral-800/80 group-hover:bg-indigo-950 flex items-center justify-center transition-colors">
-                    <Upload className="w-7 h-7 text-neutral-400 group-hover:text-indigo-400 transition-colors" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-neutral-200">
-                      Arrastra y suelta tu vídeo aquí
-                    </p>
-                    <p className="text-xs text-neutral-500 mt-1">
-                      O haz clic para explorar (.mp4, .mov, .webm)
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Reproductor Vertical 9:16 */}
-                  <div className="relative rounded-2xl overflow-hidden bg-black aspect-[9/16] max-h-[460px] mx-auto border border-neutral-800 shadow-xl group">
-                    <video
-                      ref={videoRef}
-                      src={videoUrl}
-                      onLoadedMetadata={handleLoadedMetadata}
-                      onEnded={() => setIsPlaying(false)}
-                      className="w-full h-full object-cover"
-                      playsInline
-                    />
-                    <button
-                      onClick={togglePlay}
-                      className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+              {/* MODO VIDEO */}
+              {postType === "video" && (
+                <>
+                  {!videoUrl ? (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files?.[0]) {
+                          handleFileChange(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className="border-2 border-dashed border-neutral-700/80 hover:border-indigo-500/80 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 text-center cursor-pointer transition-all bg-neutral-950/40 hover:bg-neutral-950/80 group"
                     >
-                      {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
-                    </button>
-                  </div>
-
-                  {/* Ficha técnica del vídeo */}
-                  <div className="flex items-center justify-between text-xs text-neutral-400 p-3 rounded-xl bg-neutral-950/60 border border-neutral-800">
-                    <div className="truncate max-w-[200px] text-neutral-300 font-medium">
-                      {videoFile?.name}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {videoDuration && (
-                        <span className="flex items-center gap-1 text-neutral-400">
-                          <Clock className="w-3.5 h-3.5" />
-                          {Math.round(videoDuration)}s
-                        </span>
-                      )}
-                      <button
-                        onClick={() => {
-                          setVideoFile(null);
-                          setVideoUrl(null);
-                          setExtractedFrames([]);
-                          setAiSummary("");
-                        }}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        Cambiar
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Estado y Miniaturas de Fotogramas para la IA */}
-                  {isExtractingFrames && (
-                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-indigo-300 text-xs animate-pulse">
-                      <Sparkles className="w-4 h-4 animate-spin text-amber-300 flex-shrink-0" />
-                      <span>Analizando escenas y extrayendo fotogramas para visión IA...</span>
-                    </div>
-                  )}
-
-                  {extractedFrames.length > 0 && (
-                    <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                          Visión IA: {extractedFrames.length} fotogramas capturados
-                        </span>
-                        <span className="text-[10px] text-neutral-500 font-mono">Gemini Vision</span>
+                      <div className="w-14 h-14 rounded-full bg-neutral-800/80 group-hover:bg-indigo-950 flex items-center justify-center transition-colors">
+                        <Upload className="w-7 h-7 text-neutral-400 group-hover:text-indigo-400 transition-colors" />
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        {extractedFrames.map((frame, idx) => (
-                          <div
-                            key={idx}
-                            className="relative aspect-[9/16] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 group"
-                          >
-                            <img
-                              src={frame}
-                              alt={`Escena ${idx + 1}`}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            <span className="absolute bottom-1 right-1 bg-black/75 backdrop-blur-xs text-[9px] px-1 py-0.2 rounded text-neutral-300 font-mono">
-                              #{idx + 1}
+                      <div>
+                        <p className="text-sm font-medium text-neutral-200">
+                          Arrastra y suelta tu vídeo aquí
+                        </p>
+                        <p className="text-xs text-neutral-500 mt-1">
+                          O haz clic para explorar (.mp4, .mov, .webm)
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Reproductor Vertical 9:16 */}
+                      <div className="relative rounded-2xl overflow-hidden bg-black aspect-[9/16] max-h-[460px] mx-auto border border-neutral-800 shadow-xl group">
+                        <video
+                          ref={videoRef}
+                          src={videoUrl}
+                          onLoadedMetadata={handleLoadedMetadata}
+                          onEnded={() => setIsPlaying(false)}
+                          className="w-full h-full object-cover"
+                          playsInline
+                        />
+                        <button
+                          onClick={togglePlay}
+                          className="absolute inset-0 m-auto w-14 h-14 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                        </button>
+                      </div>
+
+                      {/* Ficha técnica del vídeo */}
+                      <div className="flex items-center justify-between text-xs text-neutral-400 p-3 rounded-xl bg-neutral-950/60 border border-neutral-800">
+                        <div className="truncate max-w-[200px] text-neutral-300 font-medium">
+                          {videoFile?.name}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {videoDuration && (
+                            <span className="flex items-center gap-1 text-neutral-400">
+                              <Clock className="w-3.5 h-3.5" />
+                              {Math.round(videoDuration)}s
                             </span>
-                          </div>
-                        ))}
+                          )}
+                          <button
+                            onClick={() => {
+                              setVideoFile(null);
+                              setVideoUrl(null);
+                              setExtractedFrames([]);
+                              setAiSummary("");
+                            }}
+                            className="text-red-400 hover:text-red-300 font-medium"
+                          >
+                            Cambiar
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-neutral-400 text-center">
-                        La IA analizará estos fotogramas para redactar el título y descripción exactos de tu vídeo.
-                      </p>
+
+                      {/* Estado y Miniaturas de Fotogramas para la IA */}
+                      {isExtractingFrames && (
+                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-indigo-950/40 border border-indigo-800/50 text-indigo-300 text-xs animate-pulse">
+                          <Sparkles className="w-4 h-4 animate-spin text-amber-300 flex-shrink-0" />
+                          <span>Analizando escenas y extrayendo fotogramas para visión IA...</span>
+                        </div>
+                      )}
+
+                      {extractedFrames.length > 0 && (
+                        <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5 font-medium text-emerald-400">
+                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              Visión IA: {extractedFrames.length} fotogramas capturados
+                            </span>
+                            <span className="text-[10px] text-neutral-500 font-mono">Gemini Vision</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {extractedFrames.map((frame, idx) => (
+                              <div
+                                key={idx}
+                                className="relative aspect-[9/16] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 group"
+                              >
+                                <img
+                                  src={frame}
+                                  alt={`Escena ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                />
+                                <span className="absolute bottom-1 right-1 bg-black/75 backdrop-blur-xs text-[9px] px-1 py-0.2 rounded text-neutral-300 font-mono">
+                                  #{idx + 1}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-neutral-400 text-center">
+                            La IA analizará estos fotogramas para redactar el título y descripción exactos de tu vídeo.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+
+                  {/* URL pública opcional */}
+                  <div className="mt-4 pt-4 border-t border-neutral-800/60">
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 mb-1">
+                      <LinkIcon className="w-3 h-3 text-pink-400" />
+                      URL pública del vídeo (.mp4 para Instagram, Shorts y TikTok):
+                    </label>
+                    <input
+                      type="text"
+                      value={publicVideoUrl}
+                      onChange={(e) => setPublicVideoUrl(e.target.value)}
+                      placeholder="https://.../mi_video.mp4 (o déjalo vacío para usar demo)"
+                      className="w-full px-3 py-1.5 text-xs bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-300 focus:outline-none focus:border-pink-500 font-mono"
+                    />
+                  </div>
+                </>
               )}
 
-              {/* URL pública opcional */}
-              <div className="mt-4 pt-4 border-t border-neutral-800/60">
-                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 mb-1">
-                  <LinkIcon className="w-3 h-3 text-pink-400" />
-                  URL pública del vídeo (.mp4 para Instagram, Shorts y TikTok):
-                </label>
-                <input
-                  type="text"
-                  value={publicVideoUrl}
-                  onChange={(e) => setPublicVideoUrl(e.target.value)}
-                  placeholder="https://.../mi_video.mp4 (o déjalo vacío para usar demo)"
-                  className="w-full px-3 py-1.5 text-xs bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-300 focus:outline-none focus:border-pink-500 font-mono"
-                />
-              </div>
+              {/* MODO FOTO / IMAGEN */}
+              {postType === "image" && (
+                <>
+                  {!imageUrl ? (
+                    <div
+                      onClick={() => imageInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files?.[0]) {
+                          handleImageChange(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className="border-2 border-dashed border-neutral-700/80 hover:border-pink-500/80 rounded-2xl p-10 flex flex-col items-center justify-center gap-3 text-center cursor-pointer transition-all bg-neutral-950/40 hover:bg-neutral-950/80 group"
+                    >
+                      <div className="w-14 h-14 rounded-full bg-neutral-800/80 group-hover:bg-pink-950 flex items-center justify-center transition-colors">
+                        <ImageIcon className="w-7 h-7 text-neutral-400 group-hover:text-pink-400 transition-colors" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-neutral-200">
+                          Arrastra tu foto o imagen aquí
+                        </p>
+                        <p className="text-xs text-neutral-500 mt-1">
+                          Soporta .jpg, .jpeg, .png, .webp (para post de Instagram o X)
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Vista previa de la imagen */}
+                      <div className="relative rounded-2xl overflow-hidden bg-neutral-950 max-h-[460px] mx-auto border border-neutral-800 shadow-xl flex items-center justify-center">
+                        <img
+                          src={imageUrl}
+                          alt="Post preview"
+                          className="w-full h-auto max-h-[440px] object-contain rounded-2xl"
+                        />
+                      </div>
+
+                      {/* Datos del archivo */}
+                      <div className="flex items-center justify-between text-xs text-neutral-400 p-3 rounded-xl bg-neutral-950/60 border border-neutral-800">
+                        <div className="truncate max-w-[200px] text-neutral-300 font-medium">
+                          {imageFile?.name}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {imageFile && (
+                            <span className="text-neutral-500 font-mono">
+                              {(imageFile.size / (1024 * 1024)).toFixed(2)} MB
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              setImageFile(null);
+                              setImageUrl(null);
+                              setExtractedFrames([]);
+                              setAiSummary("");
+                            }}
+                            className="text-red-400 hover:text-red-300 font-medium"
+                          >
+                            Cambiar imagen
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-900/40 text-emerald-400 text-xs flex items-center gap-2">
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                        <span>Imagen lista para análisis visual con Gemini y publicación en Instagram / X</span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* MODO SOLO TEXTO */}
+              {postType === "text" && (
+                <div className="p-6 rounded-2xl bg-neutral-950/60 border border-neutral-800 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-950/60 border border-indigo-800/60 flex items-center justify-center mx-auto text-indigo-400">
+                    <Type className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Publicación de Solo Texto</h3>
+                    <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
+                      No necesitas subir fotos ni vídeos. Escribe tu tema a continuación y Gemini creará tweets o textos persuasivos para publicar directamente en X (Twitter).
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <input
                 ref={fileInputRef}
@@ -787,6 +975,16 @@ export default function Home() {
                 className="hidden"
                 onChange={(e) => {
                   if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
+                }}
+              />
+
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleImageChange(e.target.files[0]);
                 }}
               />
 
@@ -1018,76 +1216,102 @@ export default function Home() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {/* YouTube */}
                 <div
-                  onClick={() => setChannels({ ...channels, youtube: !channels.youtube })}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    channels.youtube
-                      ? "bg-red-950/20 border-red-800/60 text-white shadow-lg shadow-red-950/20"
-                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  onClick={() => {
+                    if (postType === "video") {
+                      setChannels({ ...channels, youtube: !channels.youtube });
+                    }
+                  }}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                    postType !== "video"
+                      ? "bg-neutral-950/20 border-neutral-900 text-neutral-600 cursor-not-allowed opacity-40"
+                      : channels.youtube
+                      ? "bg-red-950/20 border-red-800/60 text-white shadow-lg shadow-red-950/20 cursor-pointer"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60 cursor-pointer"
                   }`}
+                  title={postType !== "video" ? "YouTube Shorts solo admite formato vídeo" : ""}
                 >
                   <div className="flex items-center gap-2">
-                    <YouTubeIcon className={`w-4 h-4 ${channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
+                    <YouTubeIcon className={`w-4 h-4 ${postType === "video" && channels.youtube ? "text-red-500" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">Shorts</span>
-                      <span className="text-[10px] text-red-400/90 font-medium">YouTube</span>
+                      <span className="text-[10px] text-red-400/90 font-medium">
+                        {postType === "video" ? "YouTube" : "Solo Vídeo"}
+                      </span>
                     </div>
                   </div>
                   <div
                     className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                      channels.youtube ? "bg-red-500 border-red-500 text-white" : "border-neutral-700"
+                      postType === "video" && channels.youtube ? "bg-red-500 border-red-500 text-white" : "border-neutral-700"
                     }`}
                   >
-                    {channels.youtube && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    {postType === "video" && channels.youtube && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 {/* Instagram */}
                 <div
-                  onClick={() => setChannels({ ...channels, instagram: !channels.instagram })}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    channels.instagram
-                      ? "bg-pink-950/20 border-pink-800/60 text-white shadow-lg shadow-pink-950/20"
-                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  onClick={() => {
+                    if (postType !== "text") {
+                      setChannels({ ...channels, instagram: !channels.instagram });
+                    }
+                  }}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                    postType === "text"
+                      ? "bg-neutral-950/20 border-neutral-900 text-neutral-600 cursor-not-allowed opacity-40"
+                      : channels.instagram
+                      ? "bg-pink-950/20 border-pink-800/60 text-white shadow-lg shadow-pink-950/20 cursor-pointer"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60 cursor-pointer"
                   }`}
+                  title={postType === "text" ? "Instagram requiere foto o vídeo" : ""}
                 >
                   <div className="flex items-center gap-2">
-                    <InstagramIcon className={`w-4 h-4 ${channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
+                    <InstagramIcon className={`w-4 h-4 ${postType !== "text" && channels.instagram ? "text-pink-500" : "text-neutral-500"}`} />
                     <div>
-                      <span className="text-xs font-semibold block">Reels</span>
+                      <span className="text-xs font-semibold block">
+                        {postType === "image" ? "Feed Post" : "Reels"}
+                      </span>
                       <span className="text-[10px] text-pink-400/90 font-medium">Instagram</span>
                     </div>
                   </div>
                   <div
                     className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                      channels.instagram ? "bg-pink-500 border-pink-500 text-white" : "border-neutral-700"
+                      postType !== "text" && channels.instagram ? "bg-pink-500 border-pink-500 text-white" : "border-neutral-700"
                     }`}
                   >
-                    {channels.instagram && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    {postType !== "text" && channels.instagram && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
                 {/* TikTok */}
                 <div
-                  onClick={() => setChannels({ ...channels, tiktok: !channels.tiktok })}
-                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    channels.tiktok
-                      ? "bg-cyan-950/20 border-cyan-800/60 text-white shadow-lg shadow-cyan-950/20"
-                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  onClick={() => {
+                    if (postType !== "text") {
+                      setChannels({ ...channels, tiktok: !channels.tiktok });
+                    }
+                  }}
+                  className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                    postType === "text"
+                      ? "bg-neutral-950/20 border-neutral-900 text-neutral-600 cursor-not-allowed opacity-40"
+                      : channels.tiktok
+                      ? "bg-cyan-950/20 border-cyan-800/60 text-white shadow-lg shadow-cyan-950/20 cursor-pointer"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60 cursor-pointer"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <TikTokIcon className={`w-4 h-4 ${channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
+                    <TikTokIcon className={`w-4 h-4 ${postType !== "text" && channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">TikTok</span>
-                      <span className="text-[10px] text-cyan-400/90 font-medium">Video</span>
+                      <span className="text-[10px] text-cyan-400/90 font-medium">
+                        {postType === "image" ? "Foto Post" : "Vídeo"}
+                      </span>
                     </div>
                   </div>
                   <div
                     className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                      channels.tiktok ? "bg-cyan-500 border-cyan-500 text-black" : "border-neutral-700"
+                      postType !== "text" && channels.tiktok ? "bg-cyan-500 border-cyan-500 text-black" : "border-neutral-700"
                     }`}
                   >
-                    {channels.tiktok && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    {postType !== "text" && channels.tiktok && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -1104,7 +1328,9 @@ export default function Home() {
                     <XIcon className={`w-4 h-4 ${channels.x ? "text-white" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">X (Twitter)</span>
-                      <span className="text-[10px] text-neutral-400 font-medium">Post</span>
+                      <span className="text-[10px] text-neutral-400 font-medium">
+                        {postType === "text" ? "Tweet" : "Post"}
+                      </span>
                     </div>
                   </div>
                   <div
@@ -1201,14 +1427,14 @@ export default function Home() {
               {/* Botón Principal: Robot Autónomo Local */}
               <button
                 onClick={handlePublishWithBot}
-                disabled={isPublishing || !videoFile}
+                disabled={isPublishing || (postType === "video" && !videoFile) || (postType === "image" && !imageFile)}
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Bot className="w-4 h-4" />
                 <span>
                   {isPublishing
                     ? "Robot publicando en segundo plano..."
-                    : `🤖 Publicar con Robot en "${profiles.find((p) => p.id === selectedProfile)?.name || selectedProfile}"`}
+                    : `🤖 Publicar ${postType === "image" ? "Post con Foto" : postType === "text" ? "Post de Texto" : "Vídeo / Reel"} en "${profiles.find((p) => p.id === selectedProfile)?.name || selectedProfile}"`}
                 </span>
               </button>
 
