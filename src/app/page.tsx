@@ -571,7 +571,12 @@ export default function Home() {
     }
 
     const activeChannels = Object.entries(channels)
-      .filter(([_, active]) => active)
+      .filter(([k, active]) => {
+        if (!active) return false;
+        if (postType === "image" && (k === "youtube" || k === "tiktok")) return false;
+        if (postType === "text" && (k === "youtube" || k === "tiktok" || k === "instagram")) return false;
+        return true;
+      })
       .map(([k]) => k);
 
     if (activeChannels.length === 0) {
@@ -1313,12 +1318,13 @@ export default function Home() {
                 {/* TikTok */}
                 <div
                   onClick={() => {
-                    if (postType !== "text") {
+                    if (postType === "video") {
                       setChannels({ ...channels, tiktok: !channels.tiktok });
                     }
                   }}
+                  title={postType !== "video" ? "TikTok Studio Web solo admite vídeos (.mp4)" : ""}
                   className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
-                    postType === "text"
+                    postType !== "video"
                       ? "bg-neutral-950/20 border-neutral-900 text-neutral-600 cursor-not-allowed opacity-40"
                       : channels.tiktok
                       ? "bg-cyan-950/20 border-cyan-800/60 text-white shadow-lg shadow-cyan-950/20 cursor-pointer"
@@ -1326,20 +1332,20 @@ export default function Home() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <TikTokIcon className={`w-4 h-4 ${postType !== "text" && channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
+                    <TikTokIcon className={`w-4 h-4 ${postType === "video" && channels.tiktok ? "text-cyan-400" : "text-neutral-500"}`} />
                     <div>
                       <span className="text-xs font-semibold block">TikTok</span>
                       <span className="text-[10px] text-cyan-400/90 font-medium">
-                        {postType === "image" ? "Foto Post" : "Vídeo"}
+                        {postType === "video" ? "Vídeo" : "Solo Vídeo"}
                       </span>
                     </div>
                   </div>
                   <div
                     className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                      postType !== "text" && channels.tiktok ? "bg-cyan-500 border-cyan-500 text-black" : "border-neutral-700"
+                      postType === "video" && channels.tiktok ? "bg-cyan-500 border-cyan-500 text-black" : "border-neutral-700"
                     }`}
                   >
-                    {postType !== "text" && channels.tiktok && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                    {postType === "video" && channels.tiktok && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
@@ -1398,7 +1404,7 @@ export default function Home() {
                       )}
                       <p className="text-xs font-bold text-white">
                         {publishReports.every((r) => r.success)
-                          ? "¡Vídeo publicado con éxito en todas las redes!"
+                          ? `¡${postType === "image" ? "Post con foto" : postType === "text" ? "Post de texto" : "Vídeo / Reel"} publicado con éxito!`
                           : publishReports.some((r) => r.success)
                           ? "Publicación parcial completada:"
                           : "Informe de publicación:"}
