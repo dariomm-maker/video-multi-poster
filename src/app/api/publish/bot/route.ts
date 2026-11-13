@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     let title = "Publicación";
     let description = "";
     let formattedHashtags = "";
-    let selectedPlatforms = "tiktok,instagram,youtube,x";
+    let selectedPlatforms = "tiktok,instagram,facebook,youtube,x";
     let profile = "mi_marca";
     let postType = "video";
 

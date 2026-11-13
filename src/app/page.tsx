@@ -21,7 +21,7 @@ import {
   Type,
   Trash2,
 } from "lucide-react";
-import { YouTubeIcon, InstagramIcon, TikTokIcon, XIcon } from "@/components/Icons";
+import { YouTubeIcon, InstagramIcon, FacebookIcon, TikTokIcon, XIcon } from "@/components/Icons";
 import SettingsModal from "@/components/SettingsModal";
 
 interface GeneratedData {
@@ -65,6 +65,7 @@ export default function Home() {
   const [channels, setChannels] = useState({
     youtube: true,
     instagram: true,
+    facebook: true,
     tiktok: true,
     x: true,
   });
@@ -683,7 +684,7 @@ export default function Home() {
               type="button"
               onClick={() => {
                 setPostType("video");
-                setChannels({ youtube: true, instagram: true, tiktok: true, x: true });
+                setChannels({ youtube: true, instagram: true, facebook: true, tiktok: true, x: true });
               }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                 postType === "video"
@@ -699,7 +700,7 @@ export default function Home() {
               type="button"
               onClick={() => {
                 setPostType("image");
-                setChannels({ youtube: false, instagram: true, tiktok: true, x: true });
+                setChannels({ youtube: false, instagram: true, facebook: true, tiktok: true, x: true });
               }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                 postType === "image"
@@ -715,7 +716,7 @@ export default function Home() {
               type="button"
               onClick={() => {
                 setPostType("text");
-                setChannels({ youtube: false, instagram: false, tiktok: false, x: true });
+                setChannels({ youtube: false, instagram: false, facebook: true, tiktok: false, x: true });
               }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
                 postType === "text"
@@ -1212,8 +1213,8 @@ export default function Home() {
                 Selecciona las plataformas donde deseas publicar este vídeo en simultáneo:
               </p>
 
-              {/* Toggles de las 4 Redes */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* Toggles de las 5 Redes */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                 {/* YouTube */}
                 <div
                   onClick={() => {
@@ -1279,6 +1280,33 @@ export default function Home() {
                     }`}
                   >
                     {postType !== "text" && channels.instagram && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  </div>
+                </div>
+
+                {/* Facebook */}
+                <div
+                  onClick={() => setChannels({ ...channels, facebook: !channels.facebook })}
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                    channels.facebook
+                      ? "bg-blue-950/20 border-blue-800/60 text-white shadow-lg shadow-blue-950/20"
+                      : "bg-neutral-950/30 border-neutral-800/60 text-neutral-500 opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FacebookIcon className={`w-4 h-4 ${channels.facebook ? "text-blue-500" : "text-neutral-500"}`} />
+                    <div>
+                      <span className="text-xs font-semibold block">Facebook</span>
+                      <span className="text-[10px] text-blue-400/90 font-medium">
+                        {postType === "video" ? "Reels" : "Feed Post"}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                      channels.facebook ? "bg-blue-500 border-blue-500 text-white" : "border-neutral-700"
+                    }`}
+                  >
+                    {channels.facebook && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                   </div>
                 </div>
 
